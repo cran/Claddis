@@ -1,204 +1,224 @@
-SafeTaxonomicReduction <- function(morph.matrix) {
+#' Safe Taxonomic Reduction
+#'
+#' @description
+#'
+#' Performs Safe Taxonomic Reduction (STR) on a character-taxon matrix.
+#'
+#' @param CladisticMatrix A character-taxon matrix in the format imported by \link{ReadMorphNexus}.
+#'
+#' @details
+#'
+#' Performs Safe Taxonomic Reduction (Wilkinson 1995).
+#'
+#' If no taxa can be safely removed will print the text "No taxa can be safely removed", and the \code{str.list} and \code{removed.matrix} will have no rows.
+#'
+#' NB: If your data contains inapplicable characters these will be treated as missing data, but this is inappropriate. Thus the user is advised to double check that any removed taxa make sense in the light of inapplicable states. (As far as I am aware this same behaviour occurs in the TAXEQ3 software.)
+#'
+#' @return
+#'
+#' \item{str.list}{A matrix listing the taxa that can be removed (\code{Junior}), the taxa which they are equivalent to (\code{Senior}) and the rule under which they can be safely removed (\code{Rule}).}
+#' \item{reduced.matrix}{A character-taxon matrix excluding the taxa that can be safely removed.}
+#' \item{removed.matrix}{A character-taxon matrix of the taxa that can be safely removed.}
+#'
+#' @author Graeme T. Lloyd \email{graemetlloyd@@gmail.com}
+#'
+#' @references Wilkinson, M., 1995. Coping with abundant missing entries in phylogenetic inference using parsimony. Systematic Biology, 44, 501-514.
+#'
+#' @keywords Safe Taxonomic Reduction
+#'
+#' @examples
+#'
+#' # Performs STR on the Gauthier 1986 dataset used in Wilkinson (1995):
+#' str.out <- SafeTaxonomicReduction(Gauthier1986)
+#'
+#' # View deleted taxa:
+#' str.out$str.list
+#'
+#' # View reduced matrix:
+#' str.out$reduced.matrix
+#'
+#' # View removed matrix:
+#' str.out$removed.matrix
+#'
+#' @export SafeTaxonomicReduction
+SafeTaxonomicReduction <- function(CladisticMatrix) {
   
-  # Store extra copy of matrix:
-  full.matrix <- morph.matrix
+  # Store unaltered version of matrix to return to later:
+  Unaltered <- CladisticMatrix
   
-  # Vector for storing constant characters:
-  pars.unif <- vector(mode="numeric")
-  
-  # For each character:
-  for(i in 1:length(morph.matrix$matrix[1, ])) {
+  # If there is more than one matrix block (will need to temporarily combine into single matrix):
+  if(length(CladisticMatrix) > 2) {
     
-    # Record constant, i.e. parsimony uninformative characters:
-    if(length(unique(sort(morph.matrix$matrix[, i]))) <= 1) pars.unif[(length(pars.unif) + 1)] <- i
+    # Get list of just the matrix blocks:
+    MatrixBlocks <- lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Matrix")
+    
+    # For each additional block add at end of first block:
+    for(i in 2:length(MatrixBlocks)) MatrixBlocks[[1]] <- cbind(MatrixBlocks[[1]], MatrixBlocks[[i]][rownames(MatrixBlocks[[1]]), ])
+    
+    # Store single matrix block as first block of CladisticMatrix:
+    CladisticMatrix[[2]]$Matrix <- MatrixBlocks[[1]]
+    
+    # Store ordering for all blocks in first block of CladisticMatrix:
+    CladisticMatrix[[2]]$Ordering <- as.vector(unlist(lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Ordering")))
+    
+    # Store weights for all blocks in first block of CladisticMatrix:
+    CladisticMatrix[[2]]$Weights <- as.vector(unlist(lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Weights")))
+    
+    # Store minimum values for all blocks in first block of CladisticMatrix:
+    CladisticMatrix[[2]]$MinVals <- as.vector(unlist(lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "MinVals")))
+    
+    # Store maximum values for all blocks in first block of CladisticMatrix:
+    CladisticMatrix[[2]]$MaxVals <- as.vector(unlist(lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "MaxVals")))
+    
+    # Isolate to just first matrix block:
+    CladisticMatrix <- CladisticMatrix[1:2]
 
   }
   
-  # Record zero weight characters:
-  zero.wts <- grep(TRUE, morph.matrix$weights == 0)
+  # Prune out any zero weight characters, if they exist:
+  if(any(CladisticMatrix[[2]]$Weights == 0)) CladisticMatrix <- MatrixPruner(CladisticMatrix = CladisticMatrix, characters2prune = which(CladisticMatrix[[2]]$Weights == 0))
   
-  # Concatenate characters that are not usable in safe taxonomic reduction:
-  deletes <- sort(unique(c(pars.unif, zero.wts)))
+  # Order matrix from least to most complete taxon (as least is most likely to be removed):
+  CladisticMatrix[[2]]$Matrix <- CladisticMatrix[[2]]$Matrix[order(apply(apply(CladisticMatrix[[2]]$Matrix, 1, is.na), 2, sum), decreasing = TRUE), ]
   
-  # If there are characters that shold be ignored:
-  if(length(deletes) > 0) {
+  # Subfunction to be used by lapply to check downwards (look at more complete taxa only) for safely removable taxa:
+  CheckDownwardForMatches <- function(rownumber, CladisticMatrix) {
     
-    # Remove them from every section of the matrix:
-    morph.matrix$matrix <- morph.matrix$matrix[, -deletes]
-    morph.matrix$ordering <- morph.matrix$ordering[-deletes]
-    morph.matrix$weights <- morph.matrix$weights[-deletes]
-    morph.matrix$max.vals <- morph.matrix$max.vals[-deletes]
-    morph.matrix$min.vals <- morph.matrix$min.vals[-deletes]
-
-  }
-  
-  # Get distance matrix:
-  dist.matrix <- MorphDistMatrix(morph.matrix)$raw.dist.matrix
-  
-  # Vector for storing zero value pairs:
-  pairs <- c(NA, NA)
-  
-  # For each row:
-  for(j in 1:length(dist.matrix[, 1])) {
+    # First find which characters are not scored as missing in current taxon:
+    NonMissingCharacters <- !is.na(CladisticMatrix[[2]]$Matrix[rownumber, ])
     
-    # For each column
-    for(k in 1:length(dist.matrix[, 1])) {
+    # Build isolated matrix block from current taxon to end of matrix only for characters coded for current taxon:
+    MatrixBlockToCheck <- CladisticMatrix[[2]]$Matrix[rownumber:nrow(CladisticMatrix[[2]]$Matrix), NonMissingCharacters, drop = FALSE]
+    
+    # Find any taxa that have missing characters inside the block (can not be true parents):
+    TaxaWithMissingCharacters <- names(which(apply(apply(MatrixBlockToCheck, 1, is.na), 2, any)))
+    
+    # If any taxa have missing characters inside the block (can not be true parents) remove them from the block:
+    if(length(TaxaWithMissingCharacters) > 0) MatrixBlockToCheck <- MatrixBlockToCheck[-match(TaxaWithMissingCharacters, rownames(MatrixBlockToCheck)), , drop = FALSE]
+    
+    # Set start column (first character in matrix block):
+    StartColumn <- 1
+    
+    # Set end column (last character in matrix block):
+    EndColumn <- ncol(MatrixBlockToCheck)
+    
+    # As long as there is more potential seniors (more than one row in the matrix block) and there are still characters to check:
+    while(nrow(MatrixBlockToCheck) > 1 && StartColumn != (EndColumn + 1)) {
       
-      # Make sure we are only looking at one diagonal:
-      if(j > k) {
-        
-        # For only distances that can be calculated:
-        if(is.na(dist.matrix[j, k]) == FALSE) {
-          
-          # If the distance is zero:
-          if(dist.matrix[j, k] == 0) {
-            
-            # Record the taxon pairing:
-            pairs <- rbind(pairs, c(rownames(dist.matrix)[j], colnames(dist.matrix)[k]))
-
-          }
-
-        }
-
-      }
-
+      # Only look at rows where taxa are coded for the ith character:
+      NonMissingRows <- which(!is.na(MatrixBlockToCheck[2:nrow(MatrixBlockToCheck), StartColumn]))
+      
+      # List any insafe taxa (i.e., those with a diffrent coding to the current taxon):
+      UnsafeTaxa <- names(which(MatrixBlockToCheck[(NonMissingRows + 1), StartColumn] != MatrixBlockToCheck[1, StartColumn]))
+      
+      # Reduce the matrix block to just potential safe taxon parents (and the current taxon):
+      if(length(UnsafeTaxa) > 0) MatrixBlockToCheck <- MatrixBlockToCheck[-match(UnsafeTaxa, rownames(MatrixBlockToCheck)), , drop = FALSE]
+      
+      # Iterate to next colum:
+      StartColumn <- StartColumn + 1
+      
     }
-
+    
+    # If safe taxonomic reduction is possible store junior and senior(s):
+    if(nrow(MatrixBlockToCheck) > 1) return(cbind(rep(x = rownames(MatrixBlockToCheck)[1], times = nrow(MatrixBlockToCheck) - 1), rownames(MatrixBlockToCheck)[2:nrow(MatrixBlockToCheck)]))
+    
   }
   
-  # Vectors to store results under each rule of Wilkinson
-  rule.1a <- rule.1b <- rule.2a <- rule.2b <- c(NA, NA)
+  # Get any safely removable taxa and their senior parents:
+  SafeToRemove <- lapply(as.list(1:(nrow(CladisticMatrix[[2]]$Matrix) - 1)), CheckDownwardForMatches, CladisticMatrix = CladisticMatrix)
   
-  # As long as there are zerovalue pairs:
-  if(length(pairs) > 2) {
+  # If no taxa can be safely deleted:
+  if(all(unlist(lapply(SafeToRemove, is.null)))) {
     
-    # Delete first line which is empty:
-    pairs <- pairs[-1, ]
+    # Warn user:
+    print("No taxa can be safely removed")
     
-    # Case if only one pair:
-    if(length(pairs) == 2) pairs <- t(as.matrix(pairs))
+    # Create empty safe to remove matrix:
+    SafeToRemove <- matrix(nrow = 0, ncol = 3, dimnames = list(c(), c("Junior", "Senior", "Rule")))
     
-    # For each zero distance pair:
-    for(j in 1:length(pairs[, 1])) {
-      
-      # Get scored characters for first taxon:
-      missing.1 <- grep(TRUE, is.na(morph.matrix$matrix[match(pairs[j, 1], rownames(morph.matrix$matrix)), ]))
-      
-      # Get scored characters for second taxon:
-      missing.2 <- grep(TRUE, is.na(morph.matrix$matrix[match(pairs[j, 2], rownames(morph.matrix$matrix)), ]))
-      
-      # STR Rule 1 test (equivalence; retain either taxon):
-      if(length(setdiff(missing.1, missing.2)) == 0 && length(setdiff(missing.2, missing.1)) == 0) {
-        
-        # Meets Rule 1A (both taxa are known for all states):
-        if(length(missing.1) == length(morph.matrix$matrix[1, ])) {
-          
-          # Add to Rule 1A list:
-          rule.1a <- rbind(rule.1a, c(pairs[j, 1], pairs[j, 2]))
-        
-        # Meets rule 1B (both taxa incompletely known):
-        } else {
-          
-          # Add to Rule 1B list:
-          rule.1b <- rbind(rule.1b, c(pairs[j, 1],pairs[j, 2]))
-
-        }
-        
-      # STR Rule 2 tests (asymmetric equivalence; retain more complete taxon):
-      } else {
-        
-        # Taxon 2 redundant with respect to taxon 1:
-        if(length(setdiff(missing.1, missing.2)) == 0) {
-          
-          # If taxon 1 is completely known (Rule 2A):
-          if(length(missing.1) == length(morph.matrix$matrix[1, ])) {
-            
-            # Add to vector, junior first:
-            rule.2a <- rbind(rule.2a, c(pairs[j, 2], pairs[j, 1]))
-            
-          # If taxon 1 is not completely known (Rule 2B):
-          } else {
-            
-            # Add to vector, junior first:
-            rule.2b <- rbind(rule.2b, c(pairs[j, 2], pairs[j, 1]))
-
-          }
-
-        }
-        
-        # Taxon 1 redundant with respect to taxon 2:
-        if(length(setdiff(missing.2, missing.1)) == 0) {
-          
-          # If taxon 2 is completely known (Rule 2A):
-          if(length(missing.2) == length(morph.matrix$matrix[1, ])) {
-            
-            # Add to vector, junior first:
-            rule.2a <- rbind(rule.2a, c(pairs[j, 1], pairs[j, 2]))
-            
-          # If taxon 2 is not completely known (Rule 2B):
-          } else {
-            
-            # Add to vector, junior first:
-            rule.2b <- rbind(rule.2b, c(pairs[j, 1], pairs[j, 2]))
-
-          }
-
-		}
-
-      }
-
-    }
-
-  }
-  
-  # Remove empty first rows
-  if(length(rule.1a) == 2) rule.1a <- rule.1a[-(1:2)] else rule.1a <- rule.1a[-1,]
-  if(length(rule.1b) == 2) rule.1b <- rule.1b[-(1:2)] else rule.1b <- rule.1b[-1,]
-  if(length(rule.2a) == 2) rule.2a <- rule.2a[-(1:2)] else rule.2a <- rule.2a[-1,]
-  if(length(rule.2b) == 2) rule.2b <- rule.2b[-(1:2)] else rule.2b <- rule.2b[-1,]
-  
-  # List taxon pairs:
-  pairs <- rbind(rule.1a, rule.1b, rule.2a, rule.2b)
-  
-  # List rules:
-  rule <- c(rep("Rule 1A", length(rule.1a) / 2), rep("Rule 1B", length(rule.1b) / 2), rep("Rule 2A", length(rule.2a) / 2), rep("Rule 2B", length(rule.2b) / 2))
-  
-  # Combine into single table:
-  str.list <- cbind(pairs, rule)
-  
-  # If there are taxa that can be safely removed:
-  if(length(str.list) > 0) {
+    # Set reduced matrix as unaltered matrix:
+    RemovedMatrix <- ReducedMatrix <- Unaltered
     
-    # Name columns:
-    colnames(str.list) <- c("Junior", "Senior", "Rule")
+    # Set removed matrix as empty matrix:
+    RemovedMatrix <- MatrixPruner(Unaltered, taxa2prune = rownames(Unaltered$Matrix_1$Matrix))
     
-    # List junior taxa (i.e. those to remove):
-    removes <- sort(unique(str.list[, "Junior"]))
-    
-    # New matrices for reduced and removed:
-    reduced.matrix <- removed.matrix <- full.matrix
-    
-    # Remove STR taxa to create reduced matrix:
-    reduced.matrix <- reduced.matrix$matrix[-match(removes, rownames(reduced.matrix$matrix)), ]
-    
-    # Isolate removed taxa for removed matrix:
-    removed.matrix <- removed.matrix$matrix[match(removes, rownames(removed.matrix$matrix)), ]
-    
-    # Compile results into a list:
-    result <- list(str.list, reduced.matrix, removed.matrix)
-    
-    # Add names to results list:
-    names(result) <- c("str.list", "reduced.matrix", "removed.matrix")
-    
-  # If there are no taxa that can be safely removed:
+  # If there are taxa that can be deleted:
   } else {
     
-    # Have warning message as result:
-    result <- "No taxa can be safely removed"
-
+    # Collapse down to just those with data:
+    SafeToRemove <- SafeToRemove[which(!unlist(lapply(SafeToRemove, is.null)))]
+    
+    # Rebuild as matrix:
+    SafeToRemove <- cbind(unlist(lapply(SafeToRemove, '[', ,1)), unlist(lapply(SafeToRemove, '[', ,2)))
+    
+    # Add column names:
+    colnames(SafeToRemove) <- c("Junior", "Senior")
+    
+    # Create empty vector to store rule data:
+    STRRule <- c()
+    
+    # For each STR pair:
+    for(i in 1:nrow(SafeToRemove)) {
+      
+      # Check for rule 1 (symmetrical coding):
+      if(paste(CladisticMatrix$Matrix_1$Matrix[SafeToRemove[i, 1], ], collapse = "") == paste(CladisticMatrix$Matrix_1$Matrix[SafeToRemove[i, 2], ], collapse = "")) {
+        
+        # Check for any missing data:
+        if(any(is.na(CladisticMatrix$Matrix_1$Matrix[SafeToRemove[i, 1], ]))) {
+          
+          # Is rule 1b:
+          STRRule <- c(STRRule, "Rule 1B")
+          
+        # If no missing data:
+        } else {
+          
+          # Is rule 1a:
+          STRRule <- c(STRRule, "Rule 1A")
+          
+        }
+        
+      # Must be rule 2 (asymmetric coding):
+      } else {
+        
+        # Check for any missing data:
+        if(any(is.na(CladisticMatrix$Matrix_1$Matrix[SafeToRemove[i, 1], ]))) {
+          
+          # Is rule 2B:
+          STRRule <- c(STRRule, "Rule 2B")
+          
+        # If no missing data is rule 1a:
+        } else {
+          
+          # Is rule 2A:
+          STRRule <- c(STRRule, "Rule 2A")
+          
+        }
+        
+      }
+      
+    }
+    
+    # Add rule to output:
+    SafeToRemove <- cbind(SafeToRemove, STRRule)
+    
+    # Update column heading for rule:
+    colnames(SafeToRemove)[3] <- "Rule"
+    
+    # Set reduced matrix as complete matrix:
+    ReducedMatrix <- MatrixPruner(Unaltered, taxa2prune = unique(SafeToRemove[, "Junior"]))
+    
+    # Set removed matrix as empty matrix:
+    RemovedMatrix <- MatrixPruner(Unaltered, taxa2prune = setdiff(rownames(Unaltered$Matrix_1$Matrix), unique(SafeToRemove[, "Junior"])))
+    
   }
   
-  # Return results:
-  return(invisible(result))
-
+  # Compile output into single list:
+  output <- list(SafeToRemove, ReducedMatrix, RemovedMatrix)
+  
+  # Add names to output:
+  names(output) <- c("str.list", "reduced.matrix", "removed.matrix")
+  
+  # Return output inviisibly:
+  return(invisible(output))
+  
 }

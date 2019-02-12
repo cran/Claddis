@@ -1,37 +1,31 @@
-Claddis is an in-development R package designed to import cladistic-type data sets (#NEXUS format) into R and perform disparity and rate tests.
+Claddis is an R package designed to import cladistic-type data sets (#NEXUS format) into R and perform disparity and rate tests.
 
-Below are links to slides from three conference presentations on the package. (Note: the package has changed a lot since the first two were given!)
-
-[Talk 1](http://www.slideshare.net/graemelloyd/a-new-r-package-for-automating-cladistic-ordination-and-the-effects-of-phylogenetic-signal-on-disparity-measures)
-
-[Talk 2](http://www.slideshare.net/graemelloyd/claddis-a-new-r-package-for-automating-disparity-analyses-based-on-cladistic-datasets)
-
-[Talk 3](http://www.slideshare.net/graemelloyd/new-methodologies-for-the-use-of-cladistictype-matrices-to-measure-morphological-disparity-and-evolutionary-rate)
-
-You can install and load Claddis into R using the following:
+You can install Claddis in R using:
 
 ```r
-# Install the devtools package from CRAN:
-install.packages("devtools")
+devtools::install_github("graemetlloyd/Claddis")
+```
 
-# Load the devtools package into R:
-library(devtools)
+And load it into memory using:
 
-# Install the Claddis package from github:
-install_github("graemetlloyd/Claddis")
-
-# Load the Claddis package into R:
+```r
 library(Claddis)
 ```
 
-A brief tutorial for the package is also available [here](http://www.graemetlloyd.com/teaching/RE2014/disparity_and_rates.r).
+Basic help can be found with:
 
-More will be added here in future to show the basic features of the package.
+```r
+?Claddis
+```
+And clicking on the Index link at the base of the help file will reveal links to every available function.
 
+Note that I have previously produced tutorials for the package [here](http://www.graemetlloyd.com/teaching/RE2014/disparity_and_rates.r), but that current substantial reworking of the core code means these will no longer function and so the example code in each function's help file is the current best substitute for this.
 
 Citation
 ========
 
-Claddis will eventually be uploaded to [CRAN](http://cran.r-project.org/) and have a publication associated with it. Until then, please cite:
+Claddis is not currently available on [CRAN](https://cran.r-project.org/package=Claddis), but version (0.3) can be installed directly from github using the code above. The first formal paper describing Claddis is now published (Lloyd 2016), with further discussion in Lloyd (2018):
 
-Lloyd, Graeme T. (2015). "Claddis: an R package for performing disparity and rate analysis on cladistic-type data sets." Online at GitHub, [https://github.com/graemetlloyd/Claddis](https://github.com/graemetlloyd/Claddis). Accessed (access date).
+Lloyd, G. T., 2016. Estimating morphological diversity and tempo with discrete character-taxon matrices: implementation, challenges, progress, and future directions. *Biological Journal of the Linnean Society*, **118**, 131-151.
+
+Lloyd, G. T., 2018. Journeys through discrete-character morphospace: synthesizing phylogeny, tempo, and disparity. *Palaeontology*, **61**, 637-645.

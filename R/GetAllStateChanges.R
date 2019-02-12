@@ -1,620 +1,974 @@
-GetAllStateChanges <- function(clad.matrix, tree, time.bins, Nsim=10) {
+#' Finds all state changes on a tree using stochastic character mapping
+#'
+#' @description
+#'
+#' Takes a cladistic matrix and time-scaled tree and makes point estimates for every character change using stochastic character mapping.
+#'
+#' @param CladisticMatrix A character-taxon matrix in the format imported by \link{ReadMorphNexus}.
+#' @param Tree A time-scaled tree (phylo object) that represents the relationships of the taxa in \code{CladisticMatrix}.
+#' @param TimeBins A vector of ages representing the boundaries of a series of time bins.
+#' @param NSimulations The number of simulations to perform (passed to \code{make.simmap}.
+#' @param PolymorphismBehaviour What to do with polymorphic (&) characters. One of "equalp", "missing", or "random". See details.
+#' @param UncertaintyBehaviour What to do with uncertain (/) characters. One of "equalp", "missing", or "random". See details.
+#' @param InapplicableBehaviour What to do with inapplicable characters. Only one option currently ("missing"). See details.
+#'
+#' @details
+#'
+#' Important: this function is not yet complete and should not be used.
+#'
+#' A wrapper function for \link{make.simmap} in the \link{phytools} package.
+#'
+#' This function is intended to enumerate all possible changes on a tree (including to and from missing or inapplicable states) under the assumptions of stochastic character mapping as an alternative means of establishing branch-lengths (for rate analyses) or recording the state occupied at a particular point in time for disparity analyses.
+#'
+#' @return
+#'
+#' \item{RootStates}{A matrix of the root states for each character (column) and simulation (rows).}
+#' \item{AllStateChanges}{A matrix of rows for each change with columns corresponding to the character, the simulation number, the edge number, the time the change occurred, and the start and end states.}
+#' \item{CharacterTimes}{A vector of the sampled tree-length (in Ma) for each character.}
+#' \item{EdgeLengthsPerBin}{A matrix of time bins (columns) and characters (rows) indicating the sampled tree-length (in Ma).}
+#' \item{TerminalEdgeLengthsPerBin}{As above, but for terminal edges only.}
+#' \item{InternalEdgeLengthsPerBin}{As above, but for internal edges only.}
+#'
+#' @author Graeme T. Lloyd \email{graemetlloyd@@gmail.com}
+#'
+#' @examples
+#'
+#' # Set random seed:
+#' set.seed(2)
+#'
+#' # Use Day 2016 as source matrix:
+#' CladisticMatrix <- Day2016
+#'
+#' # Prune out continuous characters:
+#' CladisticMatrix <- MatrixPruner(CladisticMatrix =
+#'   CladisticMatrix, blocks2prune = 1)
+#'
+#' # Prune out majority of characters so
+#' # example runs quickly:
+#' CladisticMatrix <- MatrixPruner(CladisticMatrix =
+#'   CladisticMatrix, characters2prune = 1:32)
+#'
+#' # Generete random tree for matrix taxa:
+#' Tree <- rtree(nrow(Day2016$Matrix_1$Matrix))
+#'
+#' # Add taxon names to tree:
+#' Tree$tip.label <- rownames(Day2016$Matrix_1$Matrix)
+#'
+#' # Add root age to tree:
+#' Tree$root.time <- max(diag(vcv(Tree)))
+#'
+#' # Get all state changes for two simulations:
+#' StateChanges <-
+#'   GetAllStateChanges(CladisticMatrix = CladisticMatrix,
+#'   Tree = Tree, TimeBins = seq(Tree$root.time, 0,
+#'   length.out = 3), NSimulations = 2)
+#'
+#' # View matrix of all stochstic character changes:
+#' StateChanges$AllStateChanges
+#'
+#' # View vector of sampled time for each
+#' # character:
+#' StateChanges$CharacterTimes
+#'
+#' # View matrix of edge lengths in each time bin:
+#' StateChanges$EdgeLengthsPerBin
+#'
+#' # View matrix of termnial edge lengths in each time bin:
+#' StateChanges$TerminalEdgeLengthsPerBin
+#'
+#' # View matrix of internal edge lengths in each time bin:
+#' StateChanges$InternalEdgeLengthsPerBin
+#'
+#' @export GetAllStateChanges
+GetAllStateChanges <- function(CladisticMatrix, Tree, TimeBins, NSimulations = 10, PolymorphismBehaviour = "equalp", UncertaintyBehaviour = "equalp", InapplicableBehaviour = "missing") {
+  
+  # IMPROVE CUSTOMISATION OF MAKE.SIMMAP WITH OPTIONS FOR PI, Q ETC. (FLAT PRIOR ON ROOT MAY BE PARTICULARLY BAD? ALLOW MAYBE SKEWING TOWARDS OUTGROUP STATE AS SOME KIND OF SLIDING VALUE?).
+  # AND ONLY PERFORM SCM ON UNIQUE STATE DISTRIBUTON-CHARACTER TYPE COMBOS
+  # MAJOR ISSUE IS NO EASY WAY TO MAKE MODEL FOR ORDERED MULTISTATE CHARACTER WHEN NOT ALL STATES ARE FOUND AT TIPS (E.G., 0 and 2 sampled, but not 1)
+  # CHECK FOR ALL NA CHARACTERS AS THESE WILL NEED TO BE REMOVED.
+  # MOVE MISSING AS POLYMORPHISM/UNCERTIANT BEHAVIOUR TO TOP AS MORE EFFICIENT.
+  # ADD INAPPLICABLE OPTION THAT TIES SWITCH TO "" TO DEPENDENT CHARACTER A LA MORPHDISTMATRIX APPROACH.
+  # MODEL AND TIP STATE DIMENSIONS MAY VARY IF SAY ONLY VARIANCE IS A POLYMORPHIC CHARACTER BUT "RANDOM" IS USED???
+  
+  # ANY REMAINING POLYMORPHISMS ARE FOR EQUAL P
+  # IF USING EQUALP OR RANDOM AT END THEN NEED TO RECORD WEIRD CHANGE OF, SAY, 0 TO 0&1
+  # IF USING MISSING NEED TO RECORD NA TO 0&1 CHANGE
+  # GONNA HAVE TO DEAL WITH N SIMULATIONS SPREAD OVER MULTIPLE TIP STATES (SOME WILL BE UNIQUE, OTHERS WILL NEED DUPLICATION)
+  # SMEARING BACK AND SMEARING FORWARD SOMETHIG TO NITHING AND NOTHING TO SOMETHING CHANGES MAY BE DIFFERENT. PERHAPS HAVE OPTION TO TREAT TIMESTAMP FOR THESE TO VARY.
+  # IF ADDING TREES TO OUTPUT CONVERT THEM TO CLASS MULTIPHYLO, E.G. STOCHASTIC CHARACTER MAPS WITH NAS - NOTE THIS IN MANUAL TOO AS AN EXTENSION OF WHAT PHTTOOLS DOES.
+  
+  # Check for continuous and step matrices and stop and warn user if found:
+  if(length(setdiff(unique(unlist(lapply(CladisticMatrix[2:length(CladisticMatrix)], function(x) x$Ordering))), c("unord", "ord"))) > 0) stop("CladisticMatrix can only contain characters of type \"ord\" or \"unord\" (i.e., no step matrices or continuous characters).")
+  
+  # Check tree has branch lengths:
+  if(is.null(Tree$edge.length)) stop("Tree does not have branch lengths (durations). Try timescaling the Tree, e.g., with DatePhylo.")
+  
+  # Check branches all have positive length:
+  if(any(Tree$edge.length == 0)) stop("All branch lengths must be positive (no zero-length branches).")
+  
+  # Check Tree has root age:
+  if(is.null(Tree$root.time)) stop("Tree is missing $root.time. Try setting this before continuing, e.g., Tree$root.time <- 104.2.")
+  
+  # Check PolymorphismBehaviour is correctly formatted or stop and warn user:
+  if(length(setdiff(PolymorphismBehaviour, c("equalp", "missing", "random"))) > 0) stop("PolymorphismBehaviour must be one of must be one of \"equalp\", \"missing\" or \"random\".")
+  
+  # Check UncertaintyBehaviour is correctly formatted or stop and warn user:
+  if(length(setdiff(UncertaintyBehaviour, c("equalp", "missing", "random"))) > 0) stop("UncertaintyBehaviour must be one of \"equalp\", \"missing\" or \"random\".")
+  
+  # Check InapplicableBehaviour is correctly formatted or stop and warn user:
+  if(length(setdiff(InapplicableBehaviour, c("missing"))) > 0) stop("InapplicableBehaviour must be \"missing\".")
+  
+  # Ensure time bins are in correct order:
+  TimeBins <- sort(unique(TimeBins), decreasing = TRUE)
 
-# The above could maybe be modified to allow other options to be specified and handed to make.simmap (pi, Q etc.)
-# ADD CONDITIONALS HERE TO CHECK DATA ARE VALID
-# NEED TO TIME BIN INTERNAL VERSUS TERMINAL BRANCHES; ALSO MAYBE BY CHARACTER?
-# MAKE LESS VERBOSE OUTPUT?
-	
-# NEED TO SPLIT APART TERMINAL AND INTERNAL EDGES IN BINS:
-#terminal.edges <- match(1:Ntip(tree), tree$edge[, 2])
-#internal.edges <- setdiff(1:nrow(tree$edge), terminal.edges)
-	
-	# Create strings that define character models (non-missing states plus ordering):
-	char.model.sets <- paste(unlist(lapply(lapply(lapply(lapply(apply(clad.matrix$matrix, 2, strsplit, split="&"), unlist), sort), unique), paste, collapse="")), clad.matrix$ordering, sep="")
-	
-	# Create empty list to store character models:
-	char.models <- list()
-	
-	# For each unique character model:
-	for(i in unique(char.model.sets)) {
-		
-		# Get the ordering type:
-		ordering.type <- gsub("[0-9]", "", i)
-		
-		# Get the unique non-missing states:
-		states <- as.numeric(strsplit(strsplit(i, "[A-z:a-z]")[[1]][1], "")[[1]])
-		
-		# Create an empty square matrix of zeroes that will serve as the base for the character model:
-		char.model <- matrix(0, nrow=length(states), ncol=length(states))
+  # Get tree node ages:
+  TreeNodeAges <- GetNodeAges(Tree)
+  
+  # Build all data into single matrix:
+  MatrixBlock <- do.call(cbind, lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Matrix"))
+  
+  # If InapplicableBehaviour is missing replace inaplicables with NAs:
+  if(InapplicableBehaviour == "missing" && any(MatrixBlock[!is.na(MatrixBlock)] == "")) MatrixBlock[which(MatrixBlock == "")] <- NA
+  
+  # Assemble all ordering values into a single vector:
+  Ordering <- unname(do.call(c, lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Ordering")))
+  
+  # Assemble all minimum values into a single vector:
+  MinVals <- unname(do.call(c, lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "MinVals")))
+  
+  # Assemble all maximum values into a single vector:
+  MaxVals <- unname(do.call(c, lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "MaxVals")))
+  
+  # Assemble all maximum values into a single vector:
+  Weights <- unname(do.call(c, lapply(CladisticMatrix[2:length(CladisticMatrix)], '[[', "Weights")))
+  
+  # Build each character into list values starting with tip state lists (of N Simulations in length):
+  CharacterList <- lapply(lapply(apply(MatrixBlock, 2, list), unlist), function(x) {y <- list(); y$TipStates <- lapply(apply(matrix(rep(x, times = NSimulations), ncol = NSimulations, dimnames = list(names(x), c())), 2, list), unlist); return(y)})
+  
+  # Add weight to list for each character:
+  for(i in 1:length(CharacterList)) CharacterList[[i]]$Weight <- Weights[i]
+  
+  # Add ordering to list for each character:
+  for(i in 1:length(CharacterList)) CharacterList[[i]]$Ordering <- Ordering[i]
+  
+  # Add full tree to list for each character:
+  for(i in 1:length(CharacterList)) CharacterList[[i]]$FullTree <- Tree
+  
+  # Subfunction to perform polymorphism and uncertainty changes:
+  EditPolymorphisms <- function(x, PolymorphismBehaviour, UncertaintyBehaviour) {
+    
+    # Isolate tip states list:
+    TipStateList <- x$TipStates
+    
+    # If PolymorphismBehaviour is missing replace all polymorphisms with NAs:
+    if(PolymorphismBehaviour == "missing") TipStateList <- lapply(TipStateList, function(x) {CellsToAlter <- grep("&", x); if(length(CellsToAlter) > 0) x[CellsToAlter] <- NA; return(x)})
+    
+    # If UncertaintyBehaviour is missing replace all uncertainties with NAs:
+    if(UncertaintyBehaviour == "missing") TipStateList <- lapply(TipStateList, function(x) {CellsToAlter <- grep("/", x); if(length(CellsToAlter) > 0) x[CellsToAlter] <- NA; return(x)})
+    
+    # If PolymorphismBehaviour is random replace all polymorphisms with one included state at random:
+    if(PolymorphismBehaviour == "random") TipStateList <- lapply(TipStateList, function(x) {CellsToAlter <- grep("&", x); if(length(CellsToAlter) > 0) for(i in 1:length(CellsToAlter)) x[CellsToAlter[i]] <- sample(strsplit(x[CellsToAlter[i]], split = "&")[[1]], size = 1); return(x)})
+    
+    # If UncertaintyBehaviour is random replace all uncertainties with one included state at random:
+    if(UncertaintyBehaviour == "random") TipStateList <- lapply(TipStateList, function(x) {CellsToAlter <- grep("/", x); if(length(CellsToAlter) > 0) for(i in 1:length(CellsToAlter)) x[CellsToAlter[i]] <- sample(strsplit(x[CellsToAlter[i]], split = "/")[[1]], size = 1); return(x)})
+    
+    # If UncertaintyBehaviour is equalp replace all uncertainties withpolymorphism equivalent (makes grep simpler later):
+    if(UncertaintyBehaviour == "equalp") TipStateList <- lapply(TipStateList, function(x) gsub("/", "&", x))
 
-		# Only continue if there are enough states to alter the character model:
-		if(length(states) > 1) {
-			
-			# Check for confounding characters (those which are unordered, but not all states between the minimum and the maximum are sampled):
-			if((diff(range(states)) + 1) != length(states) && ordering.type == "ord") {
-				
-				# Stop and give the user an error message:
-				stop(paste("ERROR: cannot currently deal with the following ordered character(s) where not all states are sampled amongst tips: ", paste(which(char.model.sets == i), collapse=" "), sep=""))
-				
-			}
-			
-			# If character is unordered:
-			if(ordering.type == "unord") {
-				
-				# Make all off-diagonal elements equal to 1:
-				for(j in 1:nrow(char.model)) char.model[setdiff(1:nrow(char.model), j), j] <- 1
-				
-			}
-			
-			# If character is ordered:
-			if(ordering.type == "ord") {
-				
-				# Make only immediate off-diagonal elements equal to 1:
-				for(j in 1:nrow(char.model)) char.model[setdiff(1:nrow(char.model), j)[abs(setdiff(1:nrow(char.model), j) - j) == 1], j] <- 1
-				
-			}
-			
-			# If character is neither ordered or unordered:
-			if(ordering.type != "unord" && ordering.type != "ord") {
-				
-				# Simply send an error message for now:
-				stop(paste("ERROR: the following character(s) are neither ordered nor unordered and no model can be specified: ", paste(which(char.model.sets == i), collapse=" "), sep=""))
-				
-# NEED MORE HERE FOR CONTINUOUS AND STEP MATRIX CHARACTERS; CAN THEORETICALLY DO LATTER, BUT NOT SURE HOW CAN DO FORMER YET - IS THERE A WAY TO POINT SAMPLE A BROWNIAN MOTION MODEL? EVEN IF YES, WHEN IS IT SAMPLED? HAS DOWNSTREAM EFFECTS ON TIME BIN CHOICES!
-				
-			}
-			
-			# Store character model for each character that has that model:
-			for(j in which(char.model.sets == i)) char.models[[j]] <- char.model
-			
-		}
-		
-	}
-	
-	# Create empty matrix to store all state changes:
-	allstatechanges <- matrix(nrow=0, ncol=6, dimnames=list(c(), c("Character", "Nsim", "Edge", "Age", "FromState", "ToState")))
+    # Reinsert modified tip states:
+    x$TipStates <- TipStateList
+    
+    # Return list with modified tip states added:
+    return(x)
+    
+  }
+  
+  # Alter polymorphisms and uncertainties according to PolymorphismBehaviour and UncertaintyBehaviour settings:
+  CharacterList <- lapply(CharacterList, EditPolymorphisms, PolymorphismBehaviour = PolymorphismBehaviour, UncertaintyBehaviour = UncertaintyBehaviour)
+  
+  # Create pruned tipstates by removing all missing values:
+  CharacterList <- lapply(CharacterList, function(x) {x$PrunedTipStates <- lapply(x$TipStates, function(y) y[!is.na(y)]); x})
+  
+  # Get minimum and maximum values for each character (has to be done post polymorphism and inapplicable steps or will not work correctly):
+  CharacterList <- lapply(CharacterList, function(x) {Ranges <- range(as.numeric(unlist(strsplit(unlist(x$PrunedTipStates), split = "&")))); x$MinVal <- Ranges[1]; x$MaxVal <- Ranges[2]; x})
+  
+  # Subfunction to form tip states matrices ready for simmap function:
+  BuildTipStateMatrices <- function(x) {
+    
+    # Isolate pruned tip states list:
+    PrunedTipStateList <- x$PrunedTipStates
+    
+    # Subfunction to build tip state matrix:
+    BuildTipStateMatrix <- function(y, MinVal, MaxVal) {
+      
+      # Create empty tip state matrix:
+      TipStateMatrix <- matrix(0, nrow = length(y), ncol = length(MinVal:MaxVal), dimnames = list(names(y), as.character(MinVal:MaxVal)))
+      
+      # Get row and column data as list:
+      RowsAndColumns <- lapply(lapply(as.list(y), strsplit, split = "&"), unlist)
+      
+      # Isolate rows (taxon names):
+      Rows <- unname(unlist(mapply(rep, names(RowsAndColumns), unlist(lapply(RowsAndColumns, length)))))
+      
+      # Isolate columns:
+      Columns <- unname(unlist(RowsAndColumns))
+      
+      # Fill tip state matrix:
+      for(i in 1:length(Rows)) TipStateMatrix[Rows[i], Columns[i]] <- 1
+      
+      # Convert each row to a probability (unnecessary if only one column):
+      if(ncol(TipStateMatrix) > 1) TipStateMatrix <- t(apply(TipStateMatrix, 1, function(x) x / sum(x)))
+      
+      # Return tip state matrix:
+      return(TipStateMatrix)
 
-	# Vector to store time (root denominator) for each character and simulation:
-	chartime <- rep(0, ncol(clad.matrix$matrix))
-	
-	# Matrix to store time for each character:
-	terminal.edge.lengths.per.bin <- internal.edge.lengths.per.bin <- edge.lengths.per.bin <- matrix(0, ncol=length(time.bins) - 1, nrow=ncol(clad.matrix$matrix))
-	
-	# Get node ages for original tree:
-	tree.nodeages <- GetNodeAges(tree)
-	
-	# Get binary strings for missing data distributions for each character:
-	missing.strings <- apply(matrix(as.numeric(is.na(clad.matrix$matrix)), nrow=nrow(clad.matrix$matrix)), 2, paste, collapse="")
-	
-	# Create empty list to store characters that share the saem distribution of missing data:
-	MissingStringCharacters <- list()
-	
-	# Find the characters that share the same distribution of missing data:
-	for(i in 1:length(unique(missing.strings))) MissingStringCharacters[[i]] <- which(missing.strings == unique(missing.strings)[i])
-	
-	# For each character that has the same distribution of missing data:
-	for(i in 1:length(unique(missing.strings))) {
-		
-		# Find taxa to drop to make pruned tree:
-		taxa.to.drop <- rownames(clad.matrix$matrix)[which(strsplit(unique(missing.strings)[i], "")[[1]] == "1")]
-		
-		# Case if there are too few taxa to return a meaningful pruned tree:
-		if((length(tree$tip.label) - length(taxa.to.drop)) < 3) {
-			
-			# If no taxa are scored for the character(s):
-			if((length(tree$tip.label) - length(taxa.to.drop)) == 0) {
-			
-				# Warn user about zero taxon scoring:
-				cat(paste("Warning: the following character(s) are not scored for any taxa and hence no changes are recorded: ", paste(MissingStringCharacters[[i]], collapse=" "), "\n", sep=""))
+    }
+    
+    # Build tip state matrices:
+    PrunedTipStateList <- lapply(PrunedTipStateList, BuildTipStateMatrix, MinVal = x$MinVal, MaxVal = x$MaxVal)
+    
+    # Overwrite pruned tip states with tip state matrices:
+    x$PrunedTipStates <- PrunedTipStateList
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Build tip state matrices:
+  CharacterList <- lapply(CharacterList, BuildTipStateMatrices)
+  
+  # Subfunction to build character model:
+  BuildCharacterModel <- function(x) {
+    
+    # If character is ordered:
+    if(x$Ordering == "ord") {
+      
+      # Create character model with all transitions impossible:
+      CharacterModel <- matrix(0, ncol = length(x$MinVal:x$MaxVal), nrow = length(x$MinVal:x$MaxVal), dimnames = list(x$MinVal:x$MaxVal, x$MinVal:x$MaxVal))
+      
+      # Create character matrix with only off-diagonal (adjacent) states possible:
+      if(ncol(CharacterModel) > 1) for(i in 2:ncol(CharacterModel)) CharacterModel[i, (i - 1)] <- CharacterModel[(i - 1), i] <- 1
+      
+    }
+    
+    # If character is unordered:
+    if(x$Ordering == "unord") {
+      
+      # Create character model with all transitions possible:
+      CharacterModel <- matrix(1, ncol = length(x$MinVal:x$MaxVal), nrow = length(x$MinVal:x$MaxVal), dimnames = list(x$MinVal:x$MaxVal, x$MinVal:x$MaxVal))
+      
+      # Set diagonals to zero:
+      diag(CharacterModel) <- 0
+      
+    }
+    
+    # Store character model:
+    x$CharacterModel <- CharacterModel
+    
+    # Return full output:
+    return(x)
+  
+  }
+  
+  # Build character models for each character:
+  CharacterList <- lapply(CharacterList, BuildCharacterModel)
+  
+  # Get total tips in tree:
+  TipsInTree <- ape::Ntip(Tree)
 
-				# Add information on root state (NA) to allstatechanges (no need to update time fields as these are simply the default of zero):
-				allstatechanges <- rbind(allstatechanges, cbind(rep(MissingStringCharacters[[i]], Nsim), sort(rep(1:Nsim, length(MissingStringCharacters[[i]]))), rep(0, Nsim * length(MissingStringCharacters[[i]])), rep(tree$root.time, Nsim * length(MissingStringCharacters[[i]])), rep(NA, Nsim * length(MissingStringCharacters[[i]])), rep(NA, Nsim * length(MissingStringCharacters[[i]]))))
-			
-			}
-			
-			# Case if only one taxon is scored for the character(s):
-			if((length(tree$tip.label) - length(taxa.to.drop)) == 1) {
+  # Subfunction to prune tree to just tips with data:
+  PruneTree <- function(x) {
+    
+    # Find any tips to drop:
+    TipsToDrop <- setdiff(x$FullTree$tip.label, rownames(x$PrunedTipStates[[1]]))
+    
+    # If there are tips to drop:
+    if(length(TipsToDrop) > 0) {
+      
+      # If exactly one tip will remain:
+      if((TipsInTree - length(TipsToDrop)) == 1) {
+        
+        # Set pruned tree initially as full tree:
+        x$PrunedTree <- x$FullTree
+        
+        # Set tip number (of single coded taxon):
+        TipNumber <- which(Tree$tip.label == setdiff(Tree$tip.label, TipsToDrop))
+        
+        # Find single tip edge:
+        TipEdge <- which(Tree$edge[, 2] == TipNumber)
+        
+        # Set all other edge lengths to zero:
+        x$PrunedTree$edge.length[setdiff(1:length(Tree$edge), TipEdge)] <- 0
+        
+        # Reset root time to beginning of tip edge:
+        x$PrunedTree$root.time <- unname(TreeNodeAges[Tree$edge[TipEdge, 1]])
+        
+      }
+      
+      # If exactly two tips will remain:
+      if((TipsInTree - length(TipsToDrop)) == 2) {
+        
+        # Prune tree and store:
+        x$PrunedTree <- drop.tip(x$FullTree, TipsToDrop)
+        
+        # Correct root time manually:
+        x$PrunedTree$root.time <- unname(TreeNodeAges[FindAncestor(setdiff(Tree$tip.label, TipsToDrop), Tree)])
+        
+      }
+      
+      # If at least three tips will remain:
+      if((TipsInTree - length(TipsToDrop)) > 2) {
+        
+        # Prune tree and store:
+        x$PrunedTree <- drop.tip(x$FullTree, TipsToDrop)
+        
+        # Ensure pruned trees $root.time value is correct:
+        x$PrunedTree <- CorrectRootTime(Tree, x$PrunedTree)
+        
+      }
+      
+    # If no tips need to be dropped:
+    } else {
+      
+      # Store full tree as pruned version:
+      x$PrunedTree <- x$FullTree
+      
+    }
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Get pruned trees with only tips from pruned tip states returned:
+  CharacterList <- lapply(CharacterList, PruneTree)
+  
+  # Subfunction to get node ages for pruned tree:
+  GetPrunedNodeAges <- function(x) {
+    
+    # Get number of (scorable) tips for pruned tree:
+    NumberOfTips <- lapply(x$PrunedTipStates, nrow)[[1]]
+    
+    # If exactly one tip:
+    if(NumberOfTips == 1) {
+      
+      # Set pruned node ages as beginning and end of single branch:
+      x$PrunedNodeAges <- c(x$PrunedTree$root.time - sum(x$PrunedTree$edge.length), x$PrunedTree$root.time)
+      
+      # Set node numbers as 1 for the tip and 2 for the node subtending the sole branch:
+      names(x$PrunedNodeAges) <- as.character(1:2)
+      
+    }
+    
+    # If exactly two tips:
+    if(NumberOfTips == 2) {
+      
+      # Set node ages by subtracting two branch lengths from root time and adding root time at end:
+      x$PrunedNodeAges <- c(x$PrunedTree$root.time - x$PrunedTree$edge.length[order(x$PrunedTree$edge[, 2])], x$PrunedTree$root.time)
+      
+      # Set node ages as 1 and 2 (for tips) and 3 for root:
+      names(x$PrunedNodeAges) <- as.character(1:3)
+      
+    }
+    
+    # If more than two tips just apply get node ages function:
+    if(NumberOfTips > 2) x$PrunedNodeAges <- GetNodeAges(x$PrunedTree)
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Get node ages for pruned tree:
+  CharacterList <- lapply(CharacterList, GetPrunedNodeAges)
+  
+  # Subfunction to perform edge matches between pruned and full tree:
+  PerformEdgeMatches <- function(x, tree) {
+    
+    # Get number of (scorable) tips for pruned tree:
+    NumberOfTips <- lapply(x$PrunedTipStates, nrow)[[1]]
+    
+    # If exactly one tip:
+    if(NumberOfTips == 1) {
+      
+      # Compile single branch output (i.e., single branch of tree with positive length):
+      x$PrunedToFullTreeEdgeMatches <- list(which(x$PrunedTree$edge.length > 0))
+      
+      # Add name (has to be one because only one edge):
+      names(x$PrunedToFullTreeEdgeMatches) <- "1"
+      
+    }
+    
+    # If exactly two tips:
+    if(NumberOfTips == 2) {
+      
+      # Get two tip names (in order):
+      TipNames <- x$PrunedTree$tip.label
+      
+      # Get shared ancestor node on full tree:
+      AncestorNode <- FindAncestor(descs = TipNames, tree = tree)
+      
+      # Get two tip numbers for two tips on full tree:
+      TipNumbers <- unlist(lapply(lapply(as.list(TipNames), '==', tree$tip.label), which))
+      
+      # Create empty list ready to store edge matches:
+      x$PrunedToFullTreeEdgeMatches <- list()
+      
+      # For each tip number:
+      for(i in TipNumbers) {
+        
+        # Get first edge found (terminal branch):
+        EdgesFound <- which(tree$edge[, 2] == i)
+        
+        # Set current node to ith node:
+        CurrentNode <- i
+        
+        # While the ancestor has not been hit:
+        while(tree$edge[EdgesFound[1], 1] != AncestorNode) {
+          
+          # Reset current node to start of current branch:
+          CurrentNode <- tree$edge[EdgesFound[1], 1]
+          
+          # Add new edges found to vector:
+          EdgesFound <- c(which(tree$edge[, 2] == CurrentNode), EdgesFound)
+          
+        }
+        
+        # Store edges found in root-to-tip order:
+        x$PrunedToFullTreeEdgeMatches[[which(TipNumbers == i)]] <- EdgesFound
+        
+      }
+      
+      # Add edge names from pruned tree:
+      names(x$PrunedToFullTreeEdgeMatches) <- as.character(1:2)
+      
+    }
+    
+    # If more than two tips simply use function normally:
+    if(NumberOfTips > 2) x$PrunedToFullTreeEdgeMatches <- EdgeMatch(Tree, x$PrunedTree)$matching.edges
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Get edge matches between pruned and full trees (for recording true edge changes later):
+  CharacterList <- lapply(CharacterList, PerformEdgeMatches, tree = Tree)
+  
+  # Subfunction to get edge lengths in bins (usable later for rate calculations):
+  GetEdgeLengthsInBins <- function(x) {
+    
+    # Set temporary tree as full tree (as modifying branch lengths but will rant to retain these later:
+    TemporaryTree <- x$FullTree
+    
+    # Find any branch lengtsh on full tree to set as zero (effectively excluding them from the edge lengths as they correspond to missing values):
+    BranchesToSetAsZeroes <- setdiff(1:nrow(TemporaryTree$edge), unname(unlist(x$PrunedToFullTreeEdgeMatches)))
+    
+    # If there are nranches to set lengtsh to zero then do so and store:
+    if(length(BranchesToSetAsZeroes) > 0) TemporaryTree$edge.length[BranchesToSetAsZeroes] <- 0
+    
+    # Get edge lengths in bins:
+    x$EdgeLengthsInBins <- EdgeLengthsInBins(tree = TemporaryTree, time.bins = TimeBins)
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Get edge lengths in bins:
+  CharacterList <- lapply(CharacterList, GetEdgeLengthsInBins)
+  
+  # Subfunction to perform actual stochastic character maps:
+  BuildStochasticCharacterMapTrees <- function(x) {
+    
+    # Get number of (scorable) tips for pruned tree:
+    NumberOfTips <- lapply(x$PrunedTipStates, nrow)[[1]]
+    
+    # If exactly one tip:
+    if(NumberOfTips == 1) {
+      
+      # Subfunction to generate stochastic character map like output but for the single taon case:
+      BuildOneTaxonStochasticCharacterMap <- function(y, tree) {
+        
+        # Set output as the tree initially:
+        Output <- tree
+        
+        # Add maps to output of just the single branch's edge length:
+        Output$maps <- list(sum(tree$edge.length))
+        
+        # Add state name to maps:
+        Output$maps <- lapply(Output$maps, function(z) {names(z) <- colnames(y); z})
+        
+        # Return output:
+        return(Output)
+        
+      }
+      
+      # Perform stochastic character mapping and store output:
+      x$StochasticCharacterMapTrees <- lapply(x$PrunedTipStates, BuildOneTaxonStochasticCharacterMap, tree = x$PrunedTree)
+      
+    }
+    
+    # If exactly two tips:
+    if(NumberOfTips == 2) {
+      
+      # Subfunction to generate stochastic character map like output but for the two taxon case:
+      BuildTwoTaxonStochasticCharacterMap <- function(y, tree) {
+        
+        # Set output as the tree initially:
+        Output <- tree
+        
+        # Add maps to output of just the single branch's edge length:
+        Output$maps <- as.list(unname(tree$edge.length))
+        
+        # If only one state (character is constant) add state name to maps:
+        if(ncol(y) == 1) Output$maps <- lapply(Output$maps, function(z) {names(z) <- colnames(y); z})
+        
+        # If character is variant:
+        if(ncol(y) == 2) {
+          
+          # Get raw data for calculating root state probabiity (incorporates tip sattes and reciprocal of branch lengths):
+          RootStateRawData <- apply(sweep(y[tree$tip.label, ], MARGIN = 1, matrix(1 / (tree$edge.length / sum(tree$edge.length))), '*'), 2, sum)
+          
+          # Divide through by sum to get true probability:
+          RootStateProbability <- RootStateRawData / sum(RootStateRawData)
+          
+          # Sample root state with probabilities based on tip state(s) and reciprocal of branch lengths:
+          RootState <- sample(names(RootStateProbability), size = 1, prob = RootStateProbability)
+          
+          # Initially set map names to root state (one may change later):
+          Output$maps <- lapply(Output$maps, function(z) {names(z) <- RootState; z})
+          
+          # Get tip states with root column pruned (helps identify branch with changes):
+          PrunedRootTipStates <- y[tree$tip.label, -which(colnames(y) == RootState), drop = FALSE]
+          
+          # Get tips with terminal changes (could concievably be empty if there is a polymorphism):
+          TipsWithTerminalChanges <- names(which(apply(PrunedRootTipStates, 1, '==', 1)))
+          
+          # If there is a tip with a change to record:
+          if(length(TipsWithTerminalChanges) > 0) {
+            
+            # Get the tip number:
+            TipNumber <- which(tree$tip.label == TipsWithTerminalChanges)
+            
+            # Get the edge the tip corresponds to:
+            EdgeNumber <- which(tree$edge[, 2] == TipNumber)
+            
+            # Get tip state:
+            TipState <- colnames(PrunedRootTipStates[, which(PrunedRootTipStates[TipsWithTerminalChanges, ] == 1), drop = FALSE])
+            
+            # Get edge length:
+            EdgeLength <- unname(Output$maps[[EdgeNumber]])
+            
+            # Pick a split point (proportion along branch where state change occurs):
+            SplitPoint <- runif(n = 1, min = 0, max = 1)
+            
+            # Cnvert proportions into absolute branch length values:
+            Output$maps[[EdgeNumber]] <- c(SplitPoint, 1 - SplitPoint) * EdgeLength
+            
+            # Add state names to output:
+            names(Output$maps[[EdgeNumber]]) <- c(RootState, TipState)
+            
+          }
+          
+        }
+        
+        # Return output:
+        return(Output)
+        
+      }
+      
+      # Perform stochastic character mapping and store output:
+      x$StochasticCharacterMapTrees <- lapply(x$PrunedTipStates, BuildTwoTaxonStochasticCharacterMap, tree = x$PrunedTree)
+      
+    }
+    
+    # If more than two tips:
+    if(NumberOfTips > 2) {
+      
+      # Subfunction to perform stochastic character mapping:
+      GetStochasticCharacterMapTree <- function(y, tree, model) {
+        
+        # If character is constant (invariant):
+        if(ncol(y) == 1) {
+          
+          # Set initial output as tree:
+          Output <- tree
+          
+          # Set maps as edge lengths:
+          Output$maps <- as.list(tree$edge.length)
+          
+          # Add output names to maps as invariant character:
+          Output$maps <- lapply(Output$maps, function(z) {names(z) <- colnames(y); z})
+          
+        }
+        
+        # If character is variable, perform regular stochastic character mapping:
+        if(ncol(y) > 1) Output <- make.simmap(y, tree = tree, nsim = 1, model = model, pi = "estimated", message = FALSE)
+        
+        # Return output:
+        return(Output)
+        
+      }
+      
+      # Perform stochastic character mapping and store output:
+      x$StochasticCharacterMapTrees <- lapply(x$PrunedTipStates, GetStochasticCharacterMapTree, tree = x$PrunedTree, model = x$CharacterModel)
+      
+    }
+    
+    # Return all output:
+    return(x)
+    
+  }
+  
+  # Generate initial stochastic character map trees:
+  CharacterList <- lapply(CharacterList, BuildStochasticCharacterMapTrees)
+  
+  # Subfunction to map stochastic chracter maps of pruned tree to full trees:
+  MapStochasticCharactersToFullTree <- function(x) {
+    
+    # Only proceed if pruned tree is actually smaller than full tree (otherwise data are fine as is):
+    if(lapply(x$PrunedTipStates, nrow)[[1]] < ape::Ntip(x$FullTree)) {
+      
+      # Create empty list to store stochastic character maps for full trees:
+      y <- list()
+      
+      # Start by filling out list with full tree:
+      for(i in 1:NSimulations) y[[i]] <- x$FullTree
+      
+      # Generate null stochatsic character map from edge lengths:
+      NullMap <- as.list(x$FullTree$edge.length)
+      
+      # Add NA as default state (i.e., missing data) - will want to correct this for inapplicables later:
+      NullMap <- lapply(NullMap, function(z) {names(z) <- NA; z})
+      
+      # Add null stochastic character map to list:
+      for(i in 1:NSimulations) y[[i]]$maps <- NullMap
+      
+      # Find any single edge matches (where pruned edge matches a single edge in the full tree):
+      SingleEdgeMatches <- unname(which(unlist(lapply(x$PrunedToFullTreeEdgeMatches, length)) == 1))
+      
+      # Find any multiple edge matches (where a pruned edge matches more than one edge in the full tree):
+      MultipleEdgeMatches <- unname(which(unlist(lapply(x$PrunedToFullTreeEdgeMatches, length)) > 1))
+      
+      # If there is at least one single edge match then map pruned edges to full tree for them:
+      if(length(SingleEdgeMatches) > 0) for(i in 1:length(y)) y[[i]]$maps[unname(unlist(x$PrunedToFullTreeEdgeMatches[SingleEdgeMatches]))] <- x$StochasticCharacterMapTrees[[i]]$maps[SingleEdgeMatches]
+      
+      # If there is at least one multiple edge match:
+      if(length(MultipleEdgeMatches) > 0) {
+        
+        # For each simulation:
+        for(i in 1:length(y)) {
+          
+          # Find multiple edge matches where pruned edge has no changes (single state persists):
+          MultipleEdgeSingleStateMatches <- MultipleEdgeMatches[which(lapply(x$StochasticCharacterMapTrees[[i]]$maps[MultipleEdgeMatches], length) == 1)]
+          
+          # Find multiple edge matches where pruned edge has at least one change (multiple states sampled):
+          MultipleEdgeMultipleStateMatches <- MultipleEdgeMatches[which(lapply(x$StochasticCharacterMapTrees[[i]]$maps[MultipleEdgeMatches], length) > 1)]
+          
+          # If there are multiple edge but single state matches:
+          if(length(MultipleEdgeSingleStateMatches) > 0) {
+            
+            # For each match simply replace NA with the single character state:
+            for(j in MultipleEdgeSingleStateMatches) y[[i]]$maps[unname(unlist(x$PrunedToFullTreeEdgeMatches[j]))] <- lapply(y[[i]]$maps[unname(unlist(x$PrunedToFullTreeEdgeMatches[j]))], function(z) {names(z) <- names(x$StochasticCharacterMapTrees[[i]]$maps[j][[1]]); z})
+            
+          }
+          
+          # If there are multiple edge multiple state matches:
+          if(length(MultipleEdgeMultipleStateMatches) > 0) {
+            
+            # For each multiple state multiple edge match:
+            for(j in MultipleEdgeMultipleStateMatches) {
+              
+              # Get matching edges on full tree:
+              MatchingEdges <- unname(unlist(x$PrunedToFullTreeEdgeMatches[j]))
+              
+              # Get edge lengths of matching full tree edges:
+              MatchingEdgeLengths <- unname(unlist(y[[i]]$maps[unname(unlist(x$PrunedToFullTreeEdgeMatches[j]))]))
+              
+              # Get pruned stochastic maps for current pruned edge:
+              PrunedStochasticMaps <- x$StochasticCharacterMapTrees[[i]]$maps[j][[1]]
+              
+              # Get starting age of current pruned edge (will use to get change times that can be binned by full tree edge later):
+              StartAgeOfPrunedEdge <- unname(x$PrunedNodeAges[x$PrunedTree$edge[j, 1]])
+              
+              # Get times at which character changes occur:
+              ChangeTimes <- unname(StartAgeOfPrunedEdge - cumsum(PrunedStochasticMaps[1:(length(PrunedStochasticMaps) - 1)]))
+              
+              # Build matrix of from-to changes:
+              FromToChanges <- cbind(names(PrunedStochasticMaps[1:(length(PrunedStochasticMaps) - 1)]), names(PrunedStochasticMaps[2:length(PrunedStochasticMaps)]))
+              
+              # Set matching edges on full tree as time bins:
+              MatchingEdgesAsTimeBins <- c(StartAgeOfPrunedEdge, StartAgeOfPrunedEdge - cumsum(MatchingEdgeLengths))
+              
+              # Get edge on whicb change occurs:
+              ChangeEdges <- unlist(lapply(as.list(ChangeTimes), function(z) min(which(z > MatchingEdgesAsTimeBins)) - 1))
+              
+              # Create full tree stochastic character map of correct size:
+              FullStochasticMaps <- lapply(as.list(rle(sort(c(ChangeEdges, 1:length(MatchingEdges))))$lengths), function(z) rep(0, z))
+              
+              # Set current time as beginning of pruned edge:
+              CurrentTime <- StartAgeOfPrunedEdge
+              
+              # Set current edge as 1 (will increment through while loop below):
+              CurrentEdge <- 1
+              
+              # Set current state as first from value in from-to matrix:
+              CurrentState <- FromToChanges[1, 1]
+              
+              # Make vector of edge switch times:
+              EdgeSwitchTimes <- MatchingEdgesAsTimeBins[2:length(MatchingEdgesAsTimeBins)]
+              
+              # Whilst there are still changes or edge switches left to deal with:
+              while(length(c(EdgeSwitchTimes, ChangeTimes)) > 0) {
+                
+                # Set next event time:
+                NextEvent <- max(c(EdgeSwitchTimes, ChangeTimes))
+                
+                # If next event is to switch edges:
+                if(EdgeSwitchTimes[1] == NextEvent) {
+                  
+                  # Find current position on stochastic map:
+                  CurrentPosition <- which(FullStochasticMaps[[CurrentEdge]] == 0)[1]
+                  
+                  # Store edge length:
+                  FullStochasticMaps[[CurrentEdge]][CurrentPosition] <- CurrentTime - NextEvent
+                  
+                  # Store current state:
+                  names(FullStochasticMaps[[CurrentEdge]])[CurrentPosition] <- CurrentState
+                  
+                  # Update current time:
+                  CurrentTime <- NextEvent
+                  
+                  # Update current edge:
+                  CurrentEdge <- CurrentEdge + 1
+                  
+                  # Update EdgeSwitchTimes by removing last change:
+                  EdgeSwitchTimes <- EdgeSwitchTimes[-1]
+                  
+                # If next event is a change of character state:
+                } else {
+                  
+                  # Find current position on stochastic map:
+                  CurrentPosition <- which(FullStochasticMaps[[CurrentEdge]] == 0)[1]
+                  
+                  # Store edge length:
+                  FullStochasticMaps[[CurrentEdge]][CurrentPosition] <- CurrentTime - NextEvent
 
-				# Warn user about single taxon scoring:
-				cat(paste("Warning: the following character(s) are only scored for one taxon and hence no changes are recorded: ", paste(MissingStringCharacters[[i]], collapse=" "), "\n", sep=""))
-				
-				# Get terminal node number:
-				tip.number <- match(setdiff(tree$tip.label, taxa.to.drop), tree$tip.label)
-				
-				# Get edge number:
-				edge.number <- match(tip.number, tree$edge[, 2])
-				
-				# Get beginning and end of branch:
-				branch.end.dates <- tree.nodeages[tree$edge[edge.number, ]]
-				
-				# Get change times:
-				change.times <- runif(length(MissingStringCharacters[[i]]) * length(MissingStringCharacters[[i]]), min=branch.end.dates[2], max=branch.end.dates[1])
-				
-				# For each character:
-				for(j in MissingStringCharacters[[i]]) {
-					
-					# Get states for terminal taxa:
-					terminal.states <- clad.matrix$matrix[setdiff(tree$tip.label, taxa.to.drop), MissingStringCharacters[[i]]]
-				
-					# Expand by number of simulations requested:
-					terminal.states <- rep(terminal.states, Nsim)
-				
-					# Conditional if there are polymorphisms:
-					if(length(grep("&", terminal.states)) > 0) {
-				
-						# Get polymorhisms indices:
-						polymorphisms <- grep("&", terminal.states)
-					
-						# Replace polymorphisms with any included state at random:
-						for(k in polymorphisms) terminal.states[k] <- sample(strsplit(terminal.states[k], "&")[[1]])[1]
-				
-					}
-				
-					# Convert to numerics for later storing:
-					terminal.states <- as.numeric(terminal.states)
-				
-					# Update all state changes:
-					allstatechanges <- rbind(allstatechanges, cbind(rep(j, Nsim), c(1:Nsim), rep(edge.number, Nsim), rep(change.times[match(j, MissingStringCharacters[[i]])], Nsim), rep(NA, Nsim), terminal.states))
-					
-					# Create pruned tree for character:
-					pruned.tree <- tree
-				
-					# Set all branch lengths to zero:
-					pruned.tree$edge.length <- rep(0, nrow(pruned.tree$edge))
-				
-					# Update root age::
-					pruned.tree$root.time <- change.times[match(j, MissingStringCharacters[[i]])]
-					
-					# Add edge length for character:
-					pruned.tree$edge.length[edge.number] <- pruned.tree$root.time - branch.end.dates[2]
-					
-					# Get edge length per bin:
-					edge.length.per.bin <- EdgeLengthsInBins(pruned.tree, time.bins)
-					
-					# Store edge length per bin for character:
-					edge.lengths.per.bin[j, ] <- edge.length.per.bin$edge.length.in.bin
-					
-					# Store terminal edge length per bin for character:
-					terminal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$terminal.edge.length.in.bin
-					
-					# Store internal edge length per bin for character:
-					internal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$internal.edge.length.in.bin
-					
-					# Update character time:
-					chartime[j] <- sum(pruned.tree$edge.length)
-					
-				}
-			
-			}
-			
-			# Case if only two taxa are scored for the character(s):
-			if((length(tree$tip.label) - length(taxa.to.drop)) == 2) {
-				
-				# Make miniature matrix for just the taxa and characters involved:
-				scored.matrix <- matrix(clad.matrix$matrix[-match(taxa.to.drop, rownames(clad.matrix$matrix)), MissingStringCharacters[[i]]], nrow=2, dimnames=list(setdiff(rownames(clad.matrix$matrix), taxa.to.drop), MissingStringCharacters[[i]]))
-				
-				# Get root node for two taxon tree:
-				root.node <- FindAncestor(rownames(scored.matrix), tree)
-				
-				# Get tip numbers for taxa in tree:
-				tip.numbers <- match(rownames(scored.matrix), tree$tip.label)
-				
-				# Set up intitial list of edge numbers:
-				edge.numbers <- match(tip.numbers, tree$edge[, 2])
-				
-				# While edges are incomplete (do not connect both taxa all the way to the root):
-				while(sum(tree$edge[edge.numbers, 1] == root.node) != 2) {
-					
-					# Add next edge down for al edges not already connected to root:
-					edge.numbers <- sort(unique(c(edge.numbers, match(tree$edge[edge.numbers[which(tree$edge[edge.numbers, 1] != root.node)], 1], tree$edge[, 2]))))
-					
-				}
-				
-				# Set up pruned tree from full tree:
-				pruned.tree <- tree
-				
-				# make all non-sampled eedges zero in length:
-				pruned.tree$edge.length[setdiff(1:length(tree$edge.length), edge.numbers)] <- 0
-				
-				# Update root time for pruned tree:
-				pruned.tree$root.time <- tree.nodeages[root.node]
-				
-				# Store rate denominator (total edge time) for character(s):
-				chartime[MissingStringCharacters[[i]]] <- sum(pruned.tree$edge.length)
+                  # Store current state:
+                  names(FullStochasticMaps[[CurrentEdge]])[CurrentPosition] <- CurrentState
+                  
+                  # As long as the from-to matrix still exists:
+                  if(nrow(FromToChanges) > 0) {
+                    
+                    # Update current state:
+                    CurrentState <- FromToChanges[1, 2]
+                    
+                    # Prune change from from-to matrix:
+                    FromToChanges <- FromToChanges[-1, , drop = FALSE]
+                    
+                  }
+                  
+                  # Update current time:
+                  CurrentTime <- NextEvent
+                  
+                  # Prune change time from vector:
+                  ChangeTimes <- ChangeTimes[-1]
+                  
+                }
+                
+              }
+              
+              # Store full stochstic character map in y:
+              y[[i]]$maps[unname(unlist(x$PrunedToFullTreeEdgeMatches[j]))] <- FullStochasticMaps
+              
+            }
+            
+          }
 
-				# Get edge length per bin for pruned tree:
-				edge.length.per.bin <- EdgeLengthsInBins(pruned.tree, time.bins)
-				
-				# For each character:
-				for(j in MissingStringCharacters[[i]]) {
-					
-					# Store edge length per bin:
-					edge.lengths.per.bin[j, ] <- edge.length.per.bin$edge.length.in.bin
-					
-					# Store terminal edge length per bin:
-					terminal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$terminal.edge.length.in.bin
-					
-					# Store internal edge length per bin:
-					internal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$internal.edge.length.in.bin
-				
-				}
-				
-				# For each character:
-				for(j in MissingStringCharacters[[i]]) {
-				
-					# Case if character is variable:
-					if(length(unique(unlist(strsplit(scored.matrix[, as.character(j)], "&")))) > 1) {
-				
-						# Warn user about two taxon scoring:
-						cat(paste("Warning: the following character is only scored for two taxa and hence the minimum number of changes are recorded: ", j, "\n", sep=""))
-				
-					# Case if character is constant:
-					} else {
-						
-						# Warn user about two taxon scoring:
-						cat(paste("Warning: the following character is constant and hence no changes are recorded: ", j, "\n", sep=""))
-						
-						
-# Record root value and change(s) from scored to NA (trickier!)
-						
-						
-					}
-						
-				}
-		
-# Given it might be easiest to set up all.charmaps as for trees with > 2 taxa maybe this should be remvoed from the current conditional and placed into the one below?
-# AH, BUT THIS WILL NOT QUITE WORK AS PRUNED TREE HAS ALL THE EDGES, JUST LENGTHS SET TO ZERO. HMMM.
-# And deal with polymorphisms!!!!!!
-# root.state <- ??????
-# Not sure what changes to record!!!!
-# Repeat Nsim times
-				
-			}
-		
-		# Can proceed to stochastic character mapping as there are sufficient taxa:
-		} else {
-			
-			# Prune tree to just taxa that can be scored for those character(s):
-			pruned.tree <- drop.tip(tree, taxa.to.drop)
+        }
+        
+      }
+      
+      # Overwrite pruned tree stochastic character maps with full tree stochastic character maps:
+      x$StochasticCharacterMapTrees <- y
+      
+    }
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Map stochastic characters to full tree in preparation for recording changes:
+  CharacterList <- lapply(CharacterList, MapStochasticCharactersToFullTree)
 
-			# Ensure pruned trees $root.time value is correct:
-			pruned.tree <- CorrectRootTime(tree, pruned.tree)
-			
-			# Get node ages for pruned tree:
-			pruned.nodeages <- GetNodeAges(pruned.tree)
-			
-			# Store rate denominator (total edge time) for character(s):
-			chartime[MissingStringCharacters[[i]]] <- sum(pruned.tree$edge.length)
-			
-			# Get ages for start of each branch:
-			ageatstartofbranch <- pruned.nodeages[pruned.tree$edge[, 1]]
-
-			# Create matrix to store root state for all characters (columns) and simulations (rows) with same pruned.tree:
-			root.states <- matrix(NA, ncol=length(MissingStringCharacters[[i]]), nrow=Nsim)
-			
-			# Create empty list to store character maps for all characters with same pruned.tree:
-			all.charmaps <- vector("list", length(MissingStringCharacters[[i]]))
-			
-			# Add character numbers as names for character maps:
-			names(all.charmaps) <- MissingStringCharacters[[i]]
-			
-			# For each character:
-			for(j in MissingStringCharacters[[i]]) {
-				
-				# Make this into prob matrix to hand to make.simmap (i.e., deal with polymorphisms):
-				tip.values <- clad.matrix$matrix[pruned.tree$tip.label, j]
-				
-				# Specify character model:
-				char.model <- char.models[[j]]
-				
-				# If character varies:
-				if(length(sort(unique(unlist(strsplit(tip.values, "&"))))) > 1) {
-					
-# NEED SOMETHING HERE TO CATCH ISSUE WITH ORDERED CHARACTERS FOR WHICH NOT ALL STATES ARE RECOVERED
-# ALSO WHAT IF NEITHER ORDERED NOR UNORDERED?
-					
-					# Create tip states matrix that will serve as priors for make.simmap (if character is ordered):
-					if(clad.matrix$ordering[j] == "ord") tip.states <- matrix(0, nrow=Ntip(pruned.tree), ncol=length(sort(unique(unlist(strsplit(tip.values, "&"))))), dimnames=list(pruned.tree$tip.label, range(as.numeric(sort(unique(unlist(strsplit(tip.values, "&"))))))[1]:range(as.numeric(sort(unique(unlist(strsplit(tip.values, "&"))))))[2]))
-
-					# Create tip states matrix that will serve as priors for make.simmap (if character is unordered):
-					if(clad.matrix$ordering[j] == "unord") tip.states <- matrix(0, nrow=Ntip(pruned.tree), ncol=length(sort(unique(unlist(strsplit(tip.values, "&"))))), dimnames=list(pruned.tree$tip.label, sort(unique(unlist(strsplit(tip.values, "&"))))))
-					
-					# Case if polymorphisms amongst tip states:
-					if(length(grep("&", tip.values))) {
-					
-						# For each polymorphism:
-						for(k in grep("&", tip.values)) {
-						
-							# Update tip states for each state in polymorphism (each considered equally likely):
-							tip.states[k, strsplit(tip.values[k], "&")[[1]]] <- 1 / length(strsplit(tip.values[k], "&")[[1]])
-						
-						}
-						
-						# Update tip values without polymorphisms:
-						tip.values <- tip.values[-grep("&", tip.values)]
-					
-					}
-					
-					# Fill in tip states matrix for non-polymorphic codings:
-					for(k in colnames(tip.states)) tip.states[names(which(tip.values == k)), k] <- 1
-					
-					# Do stochastic character mapping Nsim times (using pi="estimated" allows root state to vary, but other options should maybe be allowed):
-					trees <- make.simmap(pruned.tree, tip.states, nsim=Nsim, model=char.model, pi="estimated", message=FALSE)
-					
-					# If Nsim is 1 need to convert to multiPhylo object so handling below works out:
-					if(class(trees) != "multiPhylo") {
-						
-						# Make trees into list:
-						trees <- list(trees)
-						
-						# Make into multiPhylo object:
-						class(trees) <- "multiPhylo"
-						
-					}
-					
-					# Get just the character maps for each Nsim:
-					all.charmaps[[match(j, MissingStringCharacters[[i]])]] <- charmaps <- lapply(trees, '[[', "maps")
-					
-					# Clean up memory a bit by removing trees (could be large variable if Nsim is large):
-					rm(trees); gc()
-					
-					# For each simulation performed:
-					for(k in 1:Nsim) {
-					
-						# Get root state(s) for pruned.tree:
-						root.states[k, match(j, MissingStringCharacters[[i]])] <- root.state <- as.numeric(names(charmaps[[k]][[match(Ntip(pruned.tree) + 1, pruned.tree$edge[, 1])]][1]))
-						
-						# Find all edges with changes (no point looking at others):
-						edgeswithchanges <- which(unlist(lapply(charmaps[[k]], length)) > 1)
-						
-						# For each branch with changes on it:
-						for(l in edgeswithchanges) {
-							
-							# Get date for each change:
-							ageofchanges <- ageatstartofbranch[l] - cumsum(charmaps[[k]][[l]])
-
-							# Get time change happened:
-							statechangetime <- ageofchanges[1:(length(ageofchanges) - 1)]
-							
-							# Get starting state of change:
-							startstate <- as.numeric(names(ageofchanges[1:(length(ageofchanges) - 1)]))
-							
-							# Get finishing state of change:
-							endstate <- as.numeric(names(ageofchanges[2:length(ageofchanges)]))
-							
-							# Add to list of all state changes:
-							allstatechanges <- rbind(allstatechanges, cbind(rep(j, length(endstate)), rep(k, length(endstate)), rep(l, length(endstate)), statechangetime, startstate, endstate))
-							
-						}
-						
-					}
-				
-				# If character is constant:
-				} else {
-					
-					# Warn user about constant character:
-					cat(paste("Warning: the following character is constant and hence no changes are recorded: ", j, "\n", sep=""))
-					
-					# Set root states:
-					for(k in 1:Nsim) root.states[k, match(j, MissingStringCharacters[[i]])] <- root.state <- as.numeric(unique(tip.values))
-
-					# Create single instance of charmaps (no changes):
-					charmaps <- as.list(pruned.tree$edge.length)
-					
-					# Add name of constant state to all values:
-					for(k in 1:length(charmaps)) names(charmaps[[k]]) <- root.state
-					
-					# Create list to store Nsim repeated charmaps:
-					charmaps2 <- list()
-					
-					# Store charmaps repeated for each Nsim:
-					for(k in 1:Nsim) charmaps2[[k]] <- charmaps
-					
-					# Get just the character maps for each Nsim:
-					all.charmaps[[match(j, MissingStringCharacters[[i]])]] <- charmaps <- charmaps2
-					
-				}
-			
-			}
-
-			# Match edges between pruned character tree and complete original tree:
-			edgematches <- EdgeMatch(tree, pruned.tree)
-
-			# Get rows that correspond to current characters only:
-			char.rows <- sort(unlist(lapply(lapply(as.list(MissingStringCharacters[[i]]), '==', allstatechanges[, "Character"]), which)))
-			
-			# Find edges in character tree that correspond to multiple edges in original tree:
-			edgeswithmultiplematches <- as.numeric(names(which(unlist(lapply(edgematches$matching.edges[unique(allstatechanges[char.rows, "Edge"])], length)) > 1)))
-			
-			# Find edges in character tree that correspond to single edges in original tree:
-			edgeswithsinglematches <- as.numeric(names(which(unlist(lapply(edgematches$matching.edges[unique(allstatechanges[char.rows, "Edge"])], length)) == 1)))
-			
-			# Get single edge match replacemnt edge numbers:
-			singlematchreplacements <- unlist(edgematches$matching.edges[edgeswithsinglematches])
-
-			# Create vector of length one to store edge replacements:
-			edgereplacements <- NA
-			
-			# If there is more than one edge to replace create longer vector of NAs to store edge replacements:
-			if(length(char.rows) > 1) edgereplacements <- rep(NA, nrow(allstatechanges[char.rows, ]))
-			
-			# As long as there are single edge replacements:
-			if(length(edgeswithsinglematches) > 0) {
-				
-				# Find single match replacements and update them:
-				for(j in edgeswithsinglematches) edgereplacements[which(allstatechanges[char.rows, "Edge"] == j)] <- singlematchreplacements[match(j, edgeswithsinglematches)]
-				
-			}
-			
-			# As long as there are multiple replacement edges:
-			if(length(edgeswithmultiplematches) > 0) {
-				
-				# For each edge with multiple replacements:
-				for(j in edgeswithmultiplematches) {
-					
-					# Get matching edges as edge numbers:
-					matching.edges <- edgematches$matching.edges[[as.character(j)]]
-					
-					# Get matching edges as to-from node numbers:
-					matching.edges.matrix <- tree$edge[matching.edges, ]
-					
-					# Get node ages for matching edges:
-					matching.edges.ages <- cbind(tree.nodeages[matching.edges.matrix[, 1]], tree.nodeages[matching.edges.matrix[, 2]])
-					
-					# Get rows from allstatechanges which will need to be changed:
-					rowstochange <- which(allstatechanges[char.rows, "Edge"] == j)
-					
-					# For each matching edge:
-					for(k in 1:nrow(matching.edges.matrix)) {
-						
-						# Get maximum edge age:
-						max.edge.age <- matching.edges.ages[k, 1]
-						
-						# Get minimum edge age:
-						min.edge.age <- matching.edges.ages[k, 2]
-						
-						# Get changes on current edge:
-						changes.on.current.edge <- intersect(which(allstatechanges[char.rows[rowstochange], "Age"] > min.edge.age), which(allstatechanges[char.rows[rowstochange], "Age"] <= max.edge.age))
-						
-						# Update edge replacements:
-						edgereplacements[which(allstatechanges[char.rows, "Edge"] == j)[changes.on.current.edge]] <- matching.edges[k]
-						
-					}
-					
-				}
-				
-			}
-			
-			# Update state changes with edges from complete tree:
-			allstatechanges[char.rows, "Edge"] <- edgereplacements
-
-			# Anything with a row sum of zero in this list can be ignored:
-			edgelinks <- matrix(FindLinkedEdges(tree)[edgematches$removed.edges, -edgematches$removed.edges], nrow=length(edgematches$removed.edges), dimnames=list(edgematches$removed.edges, colnames(FindLinkedEdges(tree))[-edgematches$removed.edges]))
-			
-			# Get list of missing edges that will have a node on a sampled edge:
-			missingedges <- as.numeric(rownames(edgelinks)[which(apply(edgelinks, 1, sum) > 0)])
-			
-			# Case if missing edge terminates at root of pruned tree:
-			if(length(sort(match(tree$edge[missingedges, 2], setdiff(tree$edge[sort(unlist(edgematches$matching.edges)), 1], tree$edge[sort(unlist(edgematches$matching.edges)), 2])))) > 0) {
-				
-				# Find node number of root in original tree:
-				pruned.root.node <- setdiff(tree$edge[sort(unlist(edgematches$matching.edges)), 1], tree$edge[sort(unlist(edgematches$matching.edges)), 2])
-
-				# Find root terminating edge:
-				root.terminating.edge <- missingedges[match(pruned.root.node, tree$edge[missingedges, 2])]
-				
-				# Add root edge to allstatechanges:
-				allstatechanges <- rbind(allstatechanges, cbind(sort(rep(MissingStringCharacters[[i]], Nsim)), rep(1:Nsim, ncol(root.states)), rep(root.terminating.edge, length(root.states)), rep(pruned.tree$root.time, length(root.states)), rep(NA, length(root.states)), as.vector(root.states)))
-				
-				# Update missing edges (remove edge prior to root or pruned tree):
-				missingedges <- setdiff(missingedges, root.terminating.edge)
-				
-			# If root is sampled in pruned tree:
-			} else {
-				
-				# Ensure root state (on edge "0") is recorded even if no other changes occur:
-				allstatechanges <- rbind(allstatechanges, cbind(sort(rep(MissingStringCharacters[[i]], Nsim)), rep(1:Nsim, ncol(root.states)), rep(0, length(root.states)), rep(tree$root.time, length(root.states)), rep(NA, length(root.states)), as.vector(root.states)))
-				
-			}
-			
-			# List nodes from which missing edges emerge:
-			missingedgestartnodes <- tree$edge[missingedges, 1]
-			
-			# Find edges at which missing start node is terminal to sample:
-			edgestosample <- match(missingedgestartnodes, tree$edge[, 2])
-			
-			# For each edge to sample:
-			for(j in edgestosample) {
-				
-				# Find pruned edge at which node emerges:
-				pruned.edge <- names(which(unlist(lapply(lapply(edgematches$matching.edges, '==', j), sum)) == 1))
-				
-				# Get edges that make up pruned edge sampled:
-				edge.string <- edgematches$matching.edges[pruned.edge][[1]]
-				
-				# For each character:
-				for(k in MissingStringCharacters[[i]]) {
-					
-					# For each simulation:
-					for(l in 1:Nsim) {
-						
-						# Get character map for edge:
-						edge.charmap <- all.charmaps[[as.character(k)]][[l]][as.numeric(pruned.edge)][[1]]
-						
-						# Case if only a single state sampled on the edge (simple):
-						if(length(edge.charmap) == 1) {
-							
-							# Get start state (only state on edge):
-							start.state <- as.numeric(names(edge.charmap))
-							
-						}
-						
-						# Case if state changes along edge:
-						if(length(edge.charmap) > 1) {
-							
-							# Get sample time for target node (end of target edge):
-							sample.time <- cumsum(tree$edge.length[edge.string])[match(j, edge.string)]
-							
-							# Get state times:
-							state.times <- cumsum(edge.charmap)
-							
-							# Get start state:
-							start.state <- as.numeric(names(state.times[length(which(sample.time > state.times)) + 1]))
-							
-						}
-
-						# Add shift to NA to allstatechanges:
-						allstatechanges <- rbind(allstatechanges, c(k, l, missingedges[match(j, edgestosample)], tree.nodeages[missingedgestartnodes[match(j, edgestosample)]], start.state, NA))
-						
-					}
-					
-				}
-				
-			}
-			
-			# Get edge length per bin for pruned tree:
-			edge.length.per.bin <- EdgeLengthsInBins(tree, time.bins, pruned.tree)
-			
-			# Store edge length per bin for each character:
-			for(j in MissingStringCharacters[[i]]) {
-			
-				# Store edge length per bin:
-				edge.lengths.per.bin[j, ] <- edge.length.per.bin$edge.length.in.bin
-				
-				# Store terminal edge length per bin:
-				terminal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$terminal.edge.length.in.bin
-				
-				# Store internal edge length per bin:
-				internal.edge.lengths.per.bin[j, ] <- edge.length.per.bin$internal.edge.length.in.bin
-			
-			}
-			
-		}
-		
-	}
-	
-	# Add column names to edge lengths per bin:
-	colnames(terminal.edge.lengths.per.bin) <- colnames(internal.edge.lengths.per.bin) <- colnames(edge.lengths.per.bin) <- names(edge.length.per.bin$edge.length.in.bin)
-	
-	# Get rid of pesky state rownames:
-	rownames(allstatechanges) <- NULL
-	
-	# Sort all state changes by edge number:
-	allstatechanges <- allstatechanges[order(allstatechanges[, "Edge"]), ]
-	
-	# Sort all state changes by character number:
-	allstatechanges <- allstatechanges[order(allstatechanges[, "Character"]), ]
-
-	# Sort all state changes by simulation number:
-	allstatechanges <- allstatechanges[order(allstatechanges[, "Nsim"]), ]
-	
-	# Compile output as list:
-	output <- list(allstatechanges, chartime, edge.lengths.per.bin, terminal.edge.lengths.per.bin, internal.edge.lengths.per.bin)
-	
-	# Add names to output:
-	names(output) <- c("all.state.changes", "character.times", "edge.length.per.bin", "terminal.edge.length.per.bin", "internal.edge.length.per.bin")
-	
-	# Return output:
-	return(output)
-	
+  # Subfunction to extract character changes matrix from trees:
+  ReformatCharacterChanges <- function(x) {
+    
+    # Find the root edge for the tree:
+    RootEdge <- match(ape::Ntip(x$FullTree) + 1, x$FullTree$edge[, 1])
+    
+    # Subfunction to get character changes and root state:
+    ExtractCharacterChanges <- function(y) {
+      
+      # Get root state:
+      RootState <- as.numeric(names(y$maps[[RootEdge]][1]))
+      
+      # Find any edges with changes on them:
+      EdgesWithChanges <- which(unlist(lapply(y$maps, length)) > 1)
+      
+      # As long as there is at least one change:
+      if(length(EdgesWithChanges) > 0) {
+        
+        # Get ages at start of edges with changes (subtracting from this will give change times later:
+        AgeAtStartOfEdgesWithChanges <- TreeNodeAges[x$FullTree$edge[EdgesWithChanges, 1]]
+        
+        # Get from and to states for each change:
+        FromsAndTos <- matrix(as.numeric(unlist(strsplit(unlist(lapply(y$maps[EdgesWithChanges], function(z) paste(names(z[1:(length(z) - 1)]), names(z[2:length(z)]), sep = "%%"))), split = "%%"))), ncol = 2, byrow = TRUE)
+        
+        # Get character change times:
+        CharacterChangeTimes <- unname(unlist(mapply('-', AgeAtStartOfEdgesWithChanges, lapply(y$maps[EdgesWithChanges], function(z) cumsum(z[1:(length(z) - 1)])))))
+        
+        # Build changes matrix:
+        ChangesMatrix <- cbind(FromsAndTos, unlist(mapply(rep, EdgesWithChanges, unlist(lapply(y$maps[EdgesWithChanges], length)) - 1)), CharacterChangeTimes)
+        
+        # Add column names to matrix:
+        colnames(ChangesMatrix) <- c("From", "To", "Edge", "Time")
+        
+      # If no changes occur:
+      } else {
+        
+        # Create changes matrix with no changes:
+        ChangesMatrix <- matrix(nrow = 0, ncol = 4, dimnames = list(c(), c("From", "To", "Edge", "Time")))
+        
+      }
+      
+      # Build matrix of from to states for each edge (i.e., state at start of edge and state at end of edge):
+      EdgeFromTo <- cbind(as.numeric(unlist(lapply(y$maps, function(y) names(y[1])))), as.numeric(unlist(lapply(y$maps, function(y) names(y[length(y)])))))
+      
+      # Get preceding states for each edge (will help identify edge-to-edge changes:
+      PrecedingState <- EdgeFromTo[match(Tree$edge[, 1], Tree$edge[, 2]), 2]
+      
+      # Get following states for each edge (will help identify edge-to-edge changes:
+      FollowingState <- EdgeFromTo[match(Tree$edge[, 2], Tree$edge[, 1]), 1]
+      
+      # Correct following edge to eliminate terminal changes whic do not need to be recorded:
+      FollowingState[match(1:ape::Ntip(Tree), Tree$edge[, 2])] <- EdgeFromTo[match(1:ape::Ntip(Tree), Tree$edge[, 2]), 2]
+      
+      # Get preceding changes (will want to add to changes matrix):
+      PrecedingChanges <- which(apply(cbind(is.na(PrecedingState), !is.na(EdgeFromTo[, 1])), 1, all))
+      
+      # Get following changes (will want to add to changes matrix):
+      FollowingChanges <- which(apply(cbind(!is.na(EdgeFromTo[, 2]), is.na(FollowingState)), 1, all))
+      
+      # For each unique preceding change:
+      for(i in PrecedingChanges[!duplicated(Tree$edge[PrecedingChanges, 1])]) {
+        
+        # If simply the root state:
+        if(ape::Ntip(Tree) + 1 == Tree$edge[i, 1]) {
+          
+          # Add root change to matrix as edge zero:
+          ChangesMatrix <- rbind(ChangesMatrix, c(NA, EdgeFromTo[i, 1], 0, Tree$root.time))
+          
+        # If some other state:
+        } else {
+          
+          # Add NA to something state change to changes matrix:
+          ChangesMatrix <- rbind(ChangesMatrix, c(NA, EdgeFromTo[i, 1], which(Tree$edge[, 2] == Tree$edge[i, 1]), unname(TreeNodeAges[Tree$edge[i, 1]])))
+          
+        }
+      
+      }
+      
+      # If there are any following changes (i.e., is there at least one missing value at the tips):
+      if(length(FollowingChanges) > 0) {
+        
+        # Add following changes to changes matrix:
+        ChangesMatrix <- rbind(ChangesMatrix, cbind(EdgeFromTo[FollowingChanges, 2], FollowingState[FollowingChanges], unlist(lapply(as.list(Tree$edge[FollowingChanges, 2]), function(z) {FollowingEdges <- which(Tree$edge[, 1] == z); FollowingEdges[is.na(EdgeFromTo[FollowingEdges, 1])]})), unname(TreeNodeAges[Tree$edge[FollowingChanges, 2]])))
+        
+      }
+      
+      # Return output:
+      return(ChangesMatrix)
+      
+    }
+    
+    # Get root and changes for each stochastic character map and store:
+    x$StochasticCharacterChanges <- lapply(x$StochasticCharacterMapTrees, ExtractCharacterChanges)
+    
+    # Return output:
+    return(x)
+    
+  }
+  
+  # Get root state and character changes for each stochastic character map:
+  CharacterList <- lapply(CharacterList, ReformatCharacterChanges)
+  
+  # Subfunction to collapse changes across simulations into a single matrix:
+  CompileChangesIntoSingleMatrix <- function(x) {
+    
+    # Get simulation numbers (will be new column in matrix):
+    SimulationNumbers <- unlist(mapply(rep, 1:NSimulations, unlist(lapply(x$StochasticCharacterChanges, function(y) nrow(y)))))
+    
+    # Collapse changes into single matrix:
+    ChangesMatrix <- do.call(rbind, lapply(x$StochasticCharacterChanges, function(y) y))
+    
+    # Add simulation numbers:
+    ChangesMatrix <- cbind(matrix(SimulationNumbers), ChangesMatrix)
+    
+    # Add column name:
+    colnames(ChangesMatrix)[1] <- "SimulationNumber"
+    
+    # Overwrite stochastic character matrices with new collapsed format:
+    x$StochasticCharacterChanges <- ChangesMatrix
+    
+    # Return full output:
+    return(x)
+    
+  }
+  
+  # Collapse stochastic character matrices to single matrix for each character:
+  CharacterList <- lapply(CharacterList, CompileChangesIntoSingleMatrix)
+  
+  # Compile all state changes into a single matrix:
+  AllStateChanges <- cbind(matrix(unlist(mapply(rep, 1:ncol(MatrixBlock), lapply(CharacterList, function(x) nrow(x$StochasticCharacterChanges))))), do.call(rbind, lapply(CharacterList, function(x) x$StochasticCharacterChanges)))
+  
+  # Add column name for character:
+  colnames(AllStateChanges)[1] <- "Character"
+  
+  # Get rid of pesky state rownames:
+  rownames(AllStateChanges) <- NULL
+  
+  # Sort all state changes by edge number:
+  AllStateChanges <- AllStateChanges[order(AllStateChanges[, "Edge"]), ]
+  
+  # Sort all state changes by character number:
+  AllStateChanges <- AllStateChanges[order(AllStateChanges[, "Character"]), ]
+  
+  # Sort all state changes by simulation number:
+  AllStateChanges <- AllStateChanges[order(AllStateChanges[, "SimulationNumber"]), ]
+  
+  # Get character times (length of subtrees for each character):
+  CharacterTimes <- unlist(lapply(CharacterList, function(x) sum(x$EdgeLengthsInBins$edge.length.in.bin)))
+  
+  # Get edge length for each bin by character:
+  EdgeLengthsPerBin <- do.call(rbind, lapply(CharacterList, function(x) x$EdgeLengthsInBins$edge.length.in.bin))
+  
+  # Get edge length for each bin by character (terminal branches only):
+  TerminalEdgeLengthsPerBin <- do.call(rbind, lapply(CharacterList, function(x) x$EdgeLengthsInBins$terminal.edge.length.in.bin))
+  
+  # Get edge length for each bin by character (internal branches only):
+  InternalEdgeLengthsPerBin <- do.call(rbind, lapply(CharacterList, function(x) x$EdgeLengthsInBins$internal.edge.length.in.bin))
+  
+  # Compile output as list:
+  output <- list(AllStateChanges, CharacterTimes, EdgeLengthsPerBin, TerminalEdgeLengthsPerBin, InternalEdgeLengthsPerBin)
+  
+  # Add names to output:
+  names(output) <- c("AllStateChanges", "CharacterTimes", "EdgeLengthsPerBin", "TerminalEdgeLengthsPerBin", "InternalEdgeLengthsPerBin")
+  
+  # Return output:
+  return(invisible(output))
+  
 }
