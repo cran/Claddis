@@ -6,10 +6,11 @@
 #' 
 #' @param CharacterTaxonMatrix A Character-Taxon (columns-rows) matrix, with taxon names as rownames.
 #' @param header A scalar indicating any header text (defaults to an empty string: "").
-#' @param weights A vector specifying the weights used (if not specified defaults to 1).
+#' @param Weights A vector specifying the weights used (if not specified defaults to 1).
 #' @param ordering A vector indicating whether characters are ordered ("ord") or unordered ("unord") (if no specified defaults to ordered).
 #' @param symbols The symbols to use if writing to a file (defaults to the numbers 0:9 then the letters A to V).
 #' @param equalise.weights Optional that overrides the weights specified above make all characters truly equally weighted.
+#' @param ignore.duplicate.taxa Logical indicating whether or not to ignore (allow; TRUE) duplicate taxa or not (FALSE; default).
 #'
 #' @details
 #'
@@ -39,7 +40,7 @@
 #' MakeMorphMatrix(CharacterTaxonMatrix)
 #'
 #' @export MakeMorphMatrix
-MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, ordering = NULL, symbols = NULL, equalise.weights = FALSE) {
+MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", Weights = NULL, ordering = NULL, symbols = NULL, equalise.weights = FALSE, ignore.duplicate.taxa = FALSE) {
   
   # Check input is a matrix:
   if(!is.matrix(CharacterTaxonMatrix)) stop("CharacterTaxonMatrix must be a matrix.")
@@ -48,7 +49,7 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   if(is.null(rownames(CharacterTaxonMatrix))) stop("CharacterTaxonMatrix must have rownames indicating taxa.")
   
   # Check taxon names are unique (could cause downstream issues if not):
-  if(any(duplicated(rownames(CharacterTaxonMatrix)))) stop("Taxon names must be unique.")
+  if(!ignore.duplicate.taxa) if(any(duplicated(rownames(CharacterTaxonMatrix)))) stop("Taxon names must be unique.")
   
   # Delete any column names (could cause downstream issues otherwise):
   if(!is.null(colnames(CharacterTaxonMatrix))) colnames(CharacterTaxonMatrix) <- NULL
@@ -73,13 +74,13 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   if(length(mystery.characters) > 0) stop("Characters must either be the integers 0 to 31, NA for missing, & for polymorphisms, or / for uncertainties.")
 
   # Check supplied weights are correct length:
-  if(!is.null(weights) && length(weights) != ncol(CharacterTaxonMatrix)) stop("Weights must have same length as number of characters in CharacterTaxonMatrix.")
+  if(!is.null(Weights) && length(Weights) != ncol(CharacterTaxonMatrix)) stop("Weights must have same length as number of characters in CharacterTaxonMatrix.")
   
   # Check supplied weights are numeric:
-  if(!is.null(weights) && !is.numeric(weights)) stop("Weights must be numeric.")
+  if(!is.null(Weights) && !is.numeric(Weights)) stop("Weights must be numeric.")
   
   # Check supplied weights are non-negative:
-  if(!is.null(weights) && any(weights < 0)) stop("Weights must not be negative.")
+  if(!is.null(Weights) && any(Weights < 0)) stop("Weights must not be negative.")
   
   # Check supplied ordering is the correct length:
   if(!is.null(ordering) && length(ordering) != ncol(CharacterTaxonMatrix)) stop("Ordering must have same length as number of characters in CharacterTaxonMatrix.")
@@ -88,7 +89,7 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   if(!is.null(ordering) && length(setdiff(ordering, c("unord", "ord"))) > 0) stop("Ordering must be unord or ord only.")
   
   # Check symbols are of correct length:
-  if(!is.null(symbols) && length(symbols) >= (diff(range(sort(as.numeric(unique(unlist(strsplit(as.character(unique(as.vector(CharacterTaxonMatrix))), "&"))))))) + 1)) stop("Symbols must be at least as long as the range of character values in CharacterTaxonMatrix.")
+  if(!is.null(symbols) && length(symbols) >= (diff(range(as.numeric(unique(sort(unlist(strsplit(as.vector(CharacterTaxonMatrix), split = "&|/"))))))) + 1)) stop("Symbols must be at least as long as the range of character values in CharacterTaxonMatrix.")
 
   # Check symbols are single characters only:
   if(!is.null(symbols) && any(nchar(symbols) != 1)) stop("Symbols must be single characters only.")
@@ -100,13 +101,19 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   if(is.null(ordering)) ordering <- rep("ord", ncol(CharacterTaxonMatrix))
 
   # If no weights are set:
-  if(is.null(weights)) weights <- rep(1, ncol(CharacterTaxonMatrix))
+  if(is.null(Weights)) Weights <- rep(1, ncol(CharacterTaxonMatrix))
 
   # Calculate minimum values:
-  min.vals <- unlist(lapply(lapply(lapply(lapply(apply(apply(CharacterTaxonMatrix, 2, as.character), 2, strsplit, split = "&|/"), unlist), as.numeric), sort), min))
-
+  min.vals <- apply(CharacterTaxonMatrix, 2, function(x) sort(as.numeric(unlist(strsplit(x, split = "&|/"))), decreasing = FALSE)[1])
+  
   # Calculate maximum values:
-  max.vals <- unlist(lapply(lapply(lapply(lapply(apply(apply(CharacterTaxonMatrix, 2, as.character), 2, strsplit, split = "&|/"), unlist), as.numeric), sort), max))
+  max.vals <- apply(CharacterTaxonMatrix, 2, function(x) sort(as.numeric(unlist(strsplit(x, split = "&|/"))), decreasing = TRUE)[1])
+  
+  # If any NAs in min.vals replace with zero:
+  if(any(is.na(min.vals))) min.vals[is.na(min.vals)] <- 0
+  
+  # If any NAs in max.vals replace with zero:
+  if(any(is.na(max.vals))) max.vals[is.na(max.vals)] <- 0
 
   # Default step matrices to NULL for now (may add this option in future):
   step.matrices <- NULL
@@ -118,13 +125,13 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   if(equalise.weights) {
     
     # Get starting weights:
-    weights <- apply(rbind(c(max.vals - min.vals), rep(1, nchar)), 2, max)
+    Weights <- apply(rbind(c(max.vals - min.vals), rep(1, nchar)), 2, max)
     
     # Updaye weights for unordered characters:
-    weights[ordering == "unord"] <- 1
+    Weights[ordering == "unord"] <- 1
     
     # Update weights for ordered characters:
-    weights[ordering == "ord"] <- 1 / weights[ordering == "ord"]
+    Weights[ordering == "ord"] <- 1 / Weights[ordering == "ord"]
     
     # If there are step matrices (not technically using these yet, but I guess this will have to exist eventually):
     if(!is.null(step.matrices)) {
@@ -133,12 +140,12 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
       step.maxes <- unlist(lapply(lapply(step.matrices, as.numeric), max))
         
       # Update weights for step matrices:
-      for(i in 1:length(step.maxes)) weights[ordering == names(step.matrices)[i]] <- 1 / step.maxes[i]
+      for(i in 1:length(step.maxes)) Weights[ordering == names(step.matrices)[i]] <- 1 / step.maxes[i]
         
     }
     
     # Ensure all weights are integers by multiplying by product of all reciprocals:
-    weights <- prod(unique(round(1 / weights))) * weights
+    Weights <- prod(unique(round(1 / Weights))) * Weights
     
     # Sub function to get all factors of an integer (stolen from: "http://stackoverflow.com/questions/6424856/r-function-for-returning-all-factors"):
     get.all.factors <- function(x) {
@@ -158,16 +165,16 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
     }
     
     # Get factors of every weight currently applied:
-    out <- sort(unlist(apply(matrix(unique(weights)), 1, get.all.factors)))
+    out <- sort(unlist(apply(matrix(unique(Weights)), 1, get.all.factors)))
     
     # As long as the maximum possible factor is greater than 1:
-    while(max(rle(out)$values[rle(out)$lengths == length(unique(weights))]) > 1) {
+    while(max(rle(out)$values[rle(out)$lengths == length(unique(Weights))]) > 1) {
         
       # Divide through weights by largest common factor:
-      weights <- weights / max(rle(out)$values[rle(out)$lengths == length(unique(weights))])
+      Weights <- Weights / max(rle(out)$values[rle(out)$lengths == length(unique(Weights))])
         
       # Update factors for new weights:
-      out <- sort(unlist(apply(matrix(unique(weights)), 1, get.all.factors)))
+      out <- sort(unlist(apply(matrix(unique(Weights)), 1, get.all.factors)))
         
     }
     
@@ -186,7 +193,7 @@ MakeMorphMatrix <- function(CharacterTaxonMatrix, header = "", weights = NULL, o
   names(Characters) <- c("Symbols", "Missing", "Gap")
   
   # Build Matrix_1 list:
-  Matrix_1 <- list(NA, "STANDARD", CharacterTaxonMatrix, ordering, weights, min.vals, max.vals, Characters)
+  Matrix_1 <- list(NA, "STANDARD", CharacterTaxonMatrix, ordering, Weights, min.vals, max.vals, Characters)
   
   # Add names to Matrix_1:
   names(Matrix_1) <- c("BlockName", "Datatype", "Matrix", "Ordering", "Weights", "MinVals", "MaxVals", "Characters")

@@ -52,8 +52,6 @@
 #'
 #' Gower, J. C., 1966. Some distance properties of latent root and vector methods used in multivariate analysis. Biometrika, 53, 325-338.
 #'
-#' @keywords classic multidimensional scaling, principal coordinates
-#'
 #' @examples
 #'
 #' # Run on Michaux (189) data set with defaults:
@@ -101,7 +99,7 @@ MorphMatrix2PCoA <- function(CladisticMatrix, Distance = "MORD", GEDType = "Will
   } else {
       
     # Get ancestral character states:
-    ancestral_values <- AncStateEstMatrix(CladisticMatrix = CladisticMatrix, Tree = Tree, EstimateAllNodes = FALSE, EstimateTipValues = FALSE, InapplicablesAsMissing = InapplicablesAsMissing, PolymorphismBehaviour = AncestralPolymorphismBehaviour, UncertaintyBehaviour = AncestralUncertaintyBehaviour, Threshold = Threshold)
+    ancestral_values <- AncStateEstMatrix(CladisticMatrix = CladisticMatrix, Tree = Tree, EstimateAllNodes = EstimateAllNodes, EstimateTipValues = EstimateTipValues, InapplicablesAsMissing = InapplicablesAsMissing, PolymorphismBehaviour = AncestralPolymorphismBehaviour, UncertaintyBehaviour = AncestralUncertaintyBehaviour, Threshold = Threshold)
 
     # Get morphological distances from the cladistic matrix:
     morph_distances <- MorphDistMatrix(ancestral_values, Distance = Distance, GEDType = GEDType, TransformDistances = TransformDistances, PolymorphismBehaviour = DistPolymorphismBehaviour, UncertaintyBehaviour = DistUncertaintyBehaviour, InapplicableBehaviour = DistInapplicableBehaviour, CharacterDependencies = CharacterDependencies, Alpha = Alpha)

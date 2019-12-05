@@ -18,8 +18,6 @@
 #'
 #' @references Goloboff, P., Farris, J. and Nixon, K., 2008. TNT, a free program for phylogenetic analysis. Cladistics, 24, 774-786.
 #'
-#' @keywords TNT
-#'
 #' @examples
 #'
 #' # Write out Michaux 1989 to current working directory:
@@ -65,7 +63,7 @@ WriteMorphTNT <- function(CladisticMatrix, filename, add.analysis.block = FALSE)
       # Find cells that have uncertainties:
       Uncertainties <- grep("/", DataMatrix$Matrix)
       
-      # Repalce with all possible values in curly braces:
+      # Replace with all possible values in curly braces:
       DataMatrix$Matrix[Uncertainties] <- paste("[", unlist(lapply(strsplit(DataMatrix$Matrix[Uncertainties], split = "/"), paste, collapse = "")), "]", sep = "")
       
     }
@@ -76,7 +74,7 @@ WriteMorphTNT <- function(CladisticMatrix, filename, add.analysis.block = FALSE)
       # Find cells with polymorphsims:
       Polymorphisms <- grep("&", DataMatrix$Matrix)
       
-      # Respale with values inside parentheses:
+      # Resplae with values inside parentheses:
       DataMatrix$Matrix[Polymorphisms] <- paste("[", unlist(lapply(strsplit(DataMatrix$Matrix[Polymorphisms], split = "&"), paste, collapse = "")), "]", sep = "")
       
     }
@@ -149,10 +147,10 @@ WriteMorphTNT <- function(CladisticMatrix, filename, add.analysis.block = FALSE)
   MatrixBlock <- paste(paste(CharacterBlock, unlist(lapply(DataBlocksAsTextStrings, paste, collapse = "\n")), "\n", sep = ""), collapse = "")
   
   # Get ordering of all characters in sequence:
-  Ordering <- unlist(lapply(DataBlocks, '[[', "Ordering"))
+  Ordering <- unname(unlist(lapply(DataBlocks, '[[', "Ordering")))
   
   # Get weights of all characters in sequence:
-  Weights <- unlist(lapply(DataBlocks, '[[', "Weights"))
+  Weights <- unname(unlist(lapply(DataBlocks, '[[', "Weights")))
 
   # Make sure step matrices are a list if null:
   if(!is.list(CladisticMatrix$Topper$StepMatrices)) CladisticMatrix$Topper$StepMatrices <- list(NULL)
@@ -220,7 +218,7 @@ WriteMorphTNT <- function(CladisticMatrix, filename, add.analysis.block = FALSE)
   }
 
   # Build ccode block:
-  CCodeBlock <- paste("ccode ", paste(paste(ifelse(ifelse(Ordering == "cont", "ord", Ordering) == "ord", "+", "-"), ifelse(Weights == 0, "]", "["), "/", ifelse(Ordering == "cont", "1", Weights), " ", paste(1:sum(NCharacters) - 1), sep = ""), collapse = " "), " ;\n", sep = "")
+  CCodeBlock <- paste("ccode ", paste(paste(ifelse(ifelse(Ordering == "cont", "ord", Ordering) == "ord", "+", "-"), ifelse(Weights == 0, "]", "["), "/", ifelse(Ordering == "cont", "1", ifelse(Weights == 0, 1, Weights)), " ", paste(1:sum(NCharacters) - 1), sep = ""), collapse = " "), " ;\n", sep = "")
   
   # Build full string with all blocks together:
   FullString <- paste("taxname=;\nmxram 4096;\ntaxname +", max(nchar(rownames(CladisticMatrix$Matrix_1$Matrix))), ";\nnstates num 32;\nxread\n", HeaderBlock, sum(NCharacters), " ", NTaxa, "\n", MatrixBlock, ";\n", CCodeBlock, StepMatrixBlock, "proc/;\n", sep = "")
@@ -238,10 +236,10 @@ WriteMorphTNT <- function(CladisticMatrix, filename, add.analysis.block = FALSE)
     } else {
       
       # First iteration with new tech (where scratch.tre is created):
-      AnalysisBlock <- c("rseed*;", "hold 999;", "xmult=rss fuse 50 drift 50 ratchet 50;", "mult 50 =tbr drift;", "tsave scratch.tre;", "save;", "tsave /;")
+      AnalysisBlock <- c("rseed*;", "hold 999;", "xmult=rss fuse 50 drift 50 ratchet 50;", "tsave scratch.tre;", "save;", "tsave /;")
       
       # Iterations 2-20 (where trees are appended to scratch.tre):
-      AnalysisBlock <- c(AnalysisBlock, rep(c("rseed*;", "hold 999;", "xmult=rss fuse 50 drift 50 ratchet 50;", "mult 50 =tbr drift;", "tsave scratch.tre +;", "save;", "tsave /;"), 19))
+      AnalysisBlock <- c(AnalysisBlock, rep(c("rseed*;", "hold 999;", "xmult=rss fuse 50 drift 50 ratchet 50;", "tsave scratch.tre +;", "save;", "tsave /;"), 19))
       
       # Read in new technology trees (scratch.tre) and finish with a heuristic (tbr) search for all mpts:
       AnalysisBlock <- c(AnalysisBlock, c("hold 100000;", "shortread scratch.tre;", "bbreak=tbr;"))

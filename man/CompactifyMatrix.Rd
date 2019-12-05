@@ -4,20 +4,22 @@
 \alias{CompactifyMatrix}
 \title{Collapses matrix to unique character state distributions}
 \usage{
-CompactifyMatrix(CladisticMatrix)
+CompactifyMatrix(CladisticMatrix, Message = TRUE)
 }
 \arguments{
 \item{CladisticMatrix}{The cladistic matrix in the format imported by \link{ReadMorphNexus}.}
+
+\item{Message}{Logical indicating whether or not a message should be printed to the screen if the matrix cannot be compactified.}
 }
 \description{
-Collapses a cladistic matrix to just unique character state distributions.
+Collapses a cladistic matrix to just unique character state distributions and taxon names.
 }
 \details{
 Important: not recommended for general use.
 
 This function is intended to make a matrix with redundant character state distributions smaller by collapsing these to single characters and upweighting them accordingly. It is intended purely for use with MRP matrices, but may have some very restricted uses elsewhere.
 
-The function also deletes any characters weighted zero from the matrix.
+The function also deletes any characters weighted zero from the matrix and will merge duplicate taxon anmes into unique character strings.
 }
 \examples{
 
@@ -43,4 +45,3 @@ Michaux1989compact$Matrix_1$Weights
 \author{
 Graeme T. Lloyd \email{graemetlloyd@gmail.com}
 }
-\keyword{NEXUS}

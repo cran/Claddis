@@ -28,8 +28,6 @@
 #'
 #' Maddison, D. R., Swofford, D. L. and Maddison, W. P., 1997. NEXUS: an extensible file format for systematic information. Systematic Biology, 46, 590-621.
 #'
-#' @keywords NEXUS
-#'
 #' @examples
 #' 
 #' # Create example matrix (NB: creates a file in the current
@@ -912,7 +910,7 @@ ReadMorphNexus <- function(File, EqualiseWeights = FALSE) {
     ContinuousBlocks <- which(names(MatrixBlockList) == "CONTINUOUS")
     
     # For each continuous blocks set weights as reciprocal of difference between min and max (i.e., effectively setting all weights as one):
-    for(i in ContinuousBlocks) Weights[[i]] <- 1 / (MinMaxMatrixList[[i]][, "Max"] - MinMaxMatrixList[[i]][, "Min"])
+    for(i in ContinuousBlocks) Weights[[i]] <- as.numeric(gsub(Inf, 1, 1 / (MinMaxMatrixList[[i]][, "Max"] - MinMaxMatrixList[[i]][, "Min"])))
     
   }
 

@@ -35,10 +35,14 @@
 TrimMorphDistMatrix <- function(dist.matrix, Tree = NULL) {
   
   # If input is of class "dist" first convert to a regular matrix:
-  if(class(dist.matrix) == "dist") dist.matrix <- as.matrix(dist.matrix)
+  if(inherits(dist.matrix, what = "dist")){
+    dist.matrix <- as.matrix(dist.matrix)
+    }
   
   # Check the input is a distance matrix:
-  if(!is.matrix(dist.matrix)) stop("ERROR: Input must be a distance matrix (i.e., either an object of class \"dist\" or a square matrix).")
+  if(!is.matrix(dist.matrix)){
+    stop("ERROR: Input must be a distance matrix (i.e., either an object of class \"dist\" or a square matrix).")
+    }
   
   # Case if there is no tree:
   if(is.null(Tree)) {
@@ -261,8 +265,14 @@ TrimMorphDistMatrix <- function(dist.matrix, Tree = NULL) {
         
       }
       
+      # Store tree prior to any pruning:
+      FullTree <- Tree
+      
       # Remove pruned taxa from tree:
       Tree <- drop.tip(Tree, tips.to.remove)
+      
+      # Correct root time (if necessary):
+      Tree <- CorrectRootTime(original.tree = FullTree, pruned.tree = Tree)
       
       # Find node names:
       node.names <- rownames(dist.matrix)[grep("%%", rownames(dist.matrix))]
