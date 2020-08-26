@@ -11,14 +11,13 @@ Measures morphological diversity from discrete character data and estimates evol
 \examples{
 
 # Get morphological distances for Michaux (1989) data set:
-distances <- MorphDistMatrix(Michaux1989)
+distances <- calculate_morphological_distances(cladistic_matrix = michaux_1989)
 
 # Show distances:
 distances
-
 }
 \references{
-Lloyd, G. T., 2016. Estimating morphological diversity and tempo with discrete character-taxon matrices: implementation, challenges, progress, and future directions. Biological Journal of the Linnean Society, 118, 131-151.
+Lloyd, G. T., 2016. Estimating morphological diversity and tempo with discrete character-taxon matrices: implementation, challenges, progress, and future directions. \emph{Biological Journal of the Linnean Society}, \bold{118}, 131-151.
 }
 \author{
 Graeme T. Lloyd <graemetlloyd@gmail.com>
