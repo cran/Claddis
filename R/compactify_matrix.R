@@ -42,6 +42,9 @@ compactify_matrix <- function(cladistic_matrix, message = TRUE) {
 
   # FUTURE COULD CHECK FOR UNORD AND ORD WHEN BINARY AND HENCE MEANINGLESS
 
+  # Check cladistic_matrix has class cladisticMatrix and stop and warn user if not:
+  if (!inherits(x = cladistic_matrix, what = "cladisticMatrix")) stop("cladistic_matrix must be an object of class \"cladisticMatrix\".")
+
   # List any zero weight characters:
   zero_weight_characters <- which(x = unlist(x = lapply(X = cladistic_matrix[2:length(x = cladistic_matrix)], "[[", "character_weights")) == 0)
 
@@ -70,7 +73,7 @@ compactify_matrix <- function(cladistic_matrix, message = TRUE) {
         cladistic_matrix[[i]]$character_weights <- unlist(x = lapply(X = lapply(X = lapply(X = lapply(X = as.list(x = rle_character_distribution_strings$values), "==", character_distribution_strings), which), function(x) cladistic_matrix[[i]]$character_weights[x]), sum))
 
         # Build new collapsed matrix:
-        cladistic_matrix[[i]]$matrix <- matrix(unlist(x = lapply(X = lapply(X = strsplit(rle_character_distribution_strings$values, " "), "[", 1), strsplit, split = "")), nrow = nrow(cladistic_matrix[[i]]$matrix), dimnames = list(rownames(x = cladistic_matrix[[i]]$Matrix), c()))
+        cladistic_matrix[[i]]$matrix <- matrix(unlist(x = lapply(X = lapply(X = strsplit(rle_character_distribution_strings$values, " "), "[", 1), strsplit, split = "")), nrow = nrow(cladistic_matrix[[i]]$matrix), dimnames = list(rownames(x = cladistic_matrix[[i]]$matrix), c()))
 
         # Get ranges of values for characters in new collapsed matrix:
         character_ranges <- lapply(X = lapply(X = lapply(X = lapply(X = lapply(X = lapply(X = apply(cladistic_matrix[[i]]$matrix, 2, strsplit, split = "/"), unlist), strsplit, split = "&"), unlist), unique), as.numeric), range)
@@ -162,6 +165,6 @@ compactify_matrix <- function(cladistic_matrix, message = TRUE) {
     }
   }
 
-  # Output unaltered matrix:
-  return(cladistic_matrix)
+  # Output matrix:
+  cladistic_matrix
 }

@@ -1,8 +1,8 @@
 Package: Claddis
 Type: Package
 Title: Measuring Morphological Diversity and Evolutionary Tempo
-Version: 0.6.1
-Date: 2020-08-25
+Version: 0.6.3
+Date: 2020-09-14
 Authors@R: c(
     person(given = "Graeme T.", family = "Lloyd",
     email = "graemetlloyd@gmail.com", role = c("aut", "cre", "cph")),
@@ -12,8 +12,7 @@ Authors@R: c(
     )
 Maintainer: Graeme T. Lloyd <graemetlloyd@gmail.com>
 Depends: ape, phytools, strap, R (>= 3.5.0)
-Imports: clipr, gdata, geoscale, graphics, grDevices, methods, stats,
-        utils
+Imports: clipr, geoscale, graphics, grDevices, methods, stats, utils
 Suggests: rgl, testthat
 Description: Measures morphological diversity from discrete character data and
     estimates evolutionary tempo on phylogenetic trees. Imports morphological
@@ -48,10 +47,10 @@ LazyData: yes
 ByteCompile: yes
 RoxygenNote: 7.1.0
 NeedsCompilation: no
-Packaged: 2020-08-25 19:38:21 UTC; eargtl
+Packaged: 2020-09-25 16:04:37 UTC; eargtl
 Author: Graeme T. Lloyd [aut, cre, cph],
   Thomas Guillerme [aut, cph],
   Emma Sherratt [aut, cph],
   Steve C. Wang [aut, cph]
 Repository: CRAN
-Date/Publication: 2020-08-26 23:00:02 UTC
+Date/Publication: 2020-09-26 04:30:23 UTC

@@ -1,3 +1,23 @@
+- Removed redundant Claddis:: calls from estimate_ancestral_states (no noticeable change to user). Thanks to Phil Novack-Gottshall for the heads up.
+
+Version - 0.6.3 - 2020-14-09
+
+- Starting to add "cladisticMatrix" class to functions (no change to users yet).
+- Added checks that cladistic_matrix inputs are of right class (no noticeable change to users).
+- Removed some weird dash characters from references in help files (no noticeable change to users).
+- Added print.cladisticMatrix that will cause objects of class "cladisticMatrix" to display a more useful summary of the object than the full list given previously.
+- Made output of read_nexus_matrix and build_cladistic_matrix no longer invisible (now the output will appear more compact if printed to screen).
+- Added new trim_marginal_whitespace function to replace defunct gdata::trim function (no noticeable change for users).
+- Removed gdata from imports (no noticeable chage to users).
+- Fixed bug in compactify_matrix that was stripping out taxon names.
+- Updated read_nexus_matrix to use new trim_marginal_whitespace function.
+- Fixed bug with reading symbols for continuous characters in read_nexus_matrix.
+
+Version - 0.6.2 - 2020-30-08
+
+- Fixed bug in assign_taxa_to_bins where no taxa were being returned because a names field was blank.
+- Tweaked plotting of points in plot_morphospace_stack to include a black outline to make them more visible.
+
 Version - 0.6.1 - 2020-25-08
 
 - Major upgrades to basic morphospace plotting function, including more options, cleaner plotting, better manual and examples.
@@ -7,6 +27,7 @@ Version - 0.6.1 - 2020-25-08
 - Added see also sections to the various disparity plotting functions to better communicate plotting options.
 - Completely rewritten morphospace stacked plot function, including renaming many input values to standardise this with other disparity plotting functions. New options include plotting of crosshairs, tickmarks, gridcells, pillars, and a group legend, as well as options to overlap or space out each platform and to choose the point size. Improvements include better convex hull plotting, a better functioning "cushion" option around points, better platform naming options, and points are now plotted "sheared" along with everything else, to make overall plotting style consistent.
 - Made some tweaks to chronophylomorphospace plotting function to bring it more in line with other disparity plotting functions, including renaming variables and adding option to assign tips to different groups and colour them accordingly as well as add a legend depicting this.
+- Successfully submitted version to CRAN.
 
 Version - 0.6.0 - 2020-12-08
 

@@ -36,6 +36,9 @@ prune_cladistic_matrix <- function(cladistic_matrix, blocks2prune = c(), charact
 
   # How do blocks and characters to prune interact? (explain to user in manual)
 
+  # Check cladistic_matrix has class cladisticMatrix and stop and warn user if not:
+  if (!inherits(x = cladistic_matrix, what = "cladisticMatrix")) stop("cladistic_matrix must be an object of class \"cladisticMatrix\".")
+
   # Subfunction to find length of character types for each character (i.e., unique values excluding polymorphisms but included inapplicables):
   find_length <- function(x) {
 
@@ -159,6 +162,9 @@ prune_cladistic_matrix <- function(cladistic_matrix, blocks2prune = c(), charact
   
   # Rename (renumber) matrix blocks to ensure consistent output:
   names(cladistic_matrix[2:length(x = cladistic_matrix)]) <- paste("matrix_", 1:(length(x = cladistic_matrix) - 1), sep = "")
+
+  # Ensure class is set:
+  class(cladistic_matrix) <- "cladisticMatrix"
 
   # Return pruned matrix:
   cladistic_matrix

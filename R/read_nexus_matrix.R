@@ -286,7 +286,7 @@ read_nexus_matrix <- function(file_name, equalize_weights = FALSE) {
     while(length(x = grep("  ", lines_to_edit)) > 0) lines_to_edit <- gsub(pattern = "  ", replacement = " ", x = lines_to_edit, fixed = TRUE)
 
     # Now isolate names within single quotes:
-    names_in_single_quotes <- unique(x = gsub(pattern = "'", replacement = "", x = strsplit(gdata::trim(paste(lines_to_edit, collapse = "")), "' '")[[1]]))
+    names_in_single_quotes <- unique(x = gsub(pattern = "'", replacement = "", x = strsplit(trim_marginal_whitespace(paste(lines_to_edit, collapse = "")), "' '")[[1]]))
 
     # Make sure nothing "" is not in this list:
     names_in_single_quotes <- which(x = !names_in_single_quotes == "")
@@ -304,9 +304,12 @@ read_nexus_matrix <- function(file_name, equalize_weights = FALSE) {
 
   # Remove weird characters (may need to add to the list or not if Sys.setlocale fixes the issues):
   raw_nexus <- gsub(pattern = "\x94|\x93|\xd5|\xd4|\xd3|\xd2|'", replacement = "", x = raw_nexus)
+  
+  # Replace all tabs with spaces:
+  raw_nexus <- gsub(pattern = "\t", replacement = " ", x = raw_nexus)
 
   # Replace tabs with spaces and trim leading and trailing spaces from each line:
-  raw_nexus <- apply(matrix(gsub(pattern = "\t", replacement = " ", x = raw_nexus)), 2, gdata::trim)
+  raw_nexus <- unlist(x = lapply(X = as.list(raw_nexus), FUN = trim_marginal_whitespace))
 
   # Delete any empty lines (if present):
   if (length(x = which(x = raw_nexus == "")) > 0) raw_nexus <- raw_nexus[-which(x = raw_nexus == "")]
@@ -627,7 +630,7 @@ read_nexus_matrix <- function(file_name, equalize_weights = FALSE) {
       if (length(x = datatype_row) > 0) {
         
         # Store datatype:
-        datatype <- strsplit(strsplit(toupper(raw_nexus[datatype_row]), split = "DATATYPE=")[[1]][2], split = " ")[[1]][1]
+        datatype <- strsplit(strsplit(toupper(x[datatype_row]), split = "DATATYPE=")[[1]][2], split = " ")[[1]][1]
         
       # If datatype is not specified:
       } else {
@@ -1216,8 +1219,10 @@ read_nexus_matrix <- function(file_name, equalize_weights = FALSE) {
     names(cladistic_matrix)[(i + 1)] <- paste("matrix_", i, sep = "")
     
   }
+  
+  # Assign class to cladistic_matrix:
+  class(cladistic_matrix) <- "cladisticMatrix"
 
   # Return cladistic_matrix invisibly:
-  invisible(cladistic_matrix)
-
+  cladistic_matrix
 }
