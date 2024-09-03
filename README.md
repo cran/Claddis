@@ -1,18 +1,18 @@
-# Claddis
+# Claddis <img src="man/figures/logo.png" align="right" width="120" />
 
 Claddis is an R package designed to import cladistic-type data sets (#NEXUS format) into R and perform disparity analysis and rate tests.
 
 # Package status
 
-### Travis release version [![Build Status](https://travis-ci.org/graemetlloyd/Claddis.svg?branch=CRAN)](https://travis-ci.org/graemetlloyd/Claddis)
-
-### Travis development version [![Build Status](https://travis-ci.org/graemetlloyd/Claddis.svg?branch=master)](https://travis-ci.org/graemetlloyd/Claddis)
-
+  <!-- badges: start -->
+  [![R-CMD-check](https://github.com/graemetlloyd/Claddis/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/graemetlloyd/Claddis/actions/workflows/R-CMD-check.yaml)
+  
 ### CRAN [![minimal R version](https://img.shields.io/badge/R%3E%3D-3.5.0-6666ff.svg)](https://cran.r-project.org/) [![cran version](https://www.r-pkg.org/badges/version/Claddis)](https://cran.r-project.org/package=Claddis) [![rstudio mirror downloads](http://cranlogs.r-pkg.org/badges/grand-total/Claddis)](https://github.com/r-hub/cranlogs.app) ![](http://cranlogs.r-pkg.org/badges/Claddis)
+  <!-- badges: end -->
 
 # Version
 
-Claddis is on [CRAN](https://cran.r-project.org/package=Claddis) (version 0.6.1) but is also being developed on GitHub. To get the absolute latest version you can use:
+Claddis is on [CRAN](https://cran.r-project.org/package=Claddis) (version 0.6.3) but is also being developed on GitHub. To get the absolute latest version you can use:
 
 ```r
 if(!require(devtools)) install.packages("devtools", dependencies = TRUE)

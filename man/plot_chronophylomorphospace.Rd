@@ -26,7 +26,7 @@ plot_chronophylomorphospace(
 
 \item{y_axis}{Which ordination axis to plot as the y-axis.}
 
-\item{taxon_groups}{A named list of groups to which taxa are assigned (optional). This is used to plot points or convex hulls in different colours corresponding to each group. As the user names the groups these can represent any grouping of interest (e.g., taxonomic, ecological, temporal, spatial). \link{assign_taxa_to_bins} can automate temporal assignments.}
+\item{taxon_groups}{An object of class \code{taxonGroups}.}
 
 \item{plot_tips}{Whether or not to plot the tip nodes (defaults to TRUE).}
 
@@ -95,6 +95,9 @@ taxon_groups <- list(nonBurnetiamorpha = c("Biarmosuchus_tener",
   Burnetiamorpha = c("Lemurosaurus_pricei", "Lobalopex_mordax",
   "Lophorhinus_willodenensis", "Proburnetia_viatkensis", "Lende_chiweta",
   "Paraburnetia_sneeubergensis", "Burnetia_mirabilis", "BP_1_7098"))
+
+# Set class as taxonGroups:
+class(taxon_groups) <- "taxonGroups"
 
 # Plot a chronophylomorphospace:
 plot_chronophylomorphospace(

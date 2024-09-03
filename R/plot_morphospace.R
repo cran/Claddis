@@ -8,7 +8,7 @@
 #' @param x_axis Which ordination axis to plot as the x-axis (defaults to 1).
 #' @param y_axis Which ordination axis to plot as the y-axis (defaults to 2).
 #' @param z_axis Which ordination axis to plot as the z-axis (defaults to NULL, i.e., is not plotted).
-#' @param taxon_groups A named list of groups to which taxa are assigned (optional). This is used to plot points or convex hulls in different colours corresponding to each group. As the user names the groups these can represent any grouping of interest (e.g., taxonomic, ecological, temporal, spatial). \link{assign_taxa_to_bins} can automate temporal assignments.
+#' @param taxon_groups An object of class \code{taxonGroups}.
 #' @param plot_taxon_names Logical indicating whether to plot the names of the taxa (defaults to FALSE).
 #' @param plot_convex_hulls Logical indicating whether to plot convex hulls around any taxon_groups (if used).
 #' @param plot_internal_nodes Logical indicating whether to plot the internal nodes of the tree (if included in \code{pcoa_input}) (defaults to FALSE).
@@ -23,6 +23,15 @@
 #' @param inform Logical indicating whether to inform the user of any taxon pruning. (Default is TRUE.)
 #' @param x_limits Plot limits to use for x-axis. Only intended for use by \link{plot_multi_morphospace}.
 #' @param y_limits Plot limits to use for y-axis. Only intended for use by \link{plot_multi_morphospace}.
+#' @param plot_size_landscape Logical indicating whether or not to plot a body size "landscape". If \code{TRUE} then \code{size_variable} must be set.
+#' @param size_variable A numeric vector with taxon names matching \code{pcoa_input}. Size can be measured anyway the user wishes (length, mass etc.).
+#' @param n_x_tiles The number of horizontal "tiles" to plot a size landscape with.
+#' @param n_y_tiles The number of vertical "tiles" to plot a size landscape with.
+#' @param landscape_colour The colour of the size landscape. Must be one of \code{"blue"}, \code{"green"} or \code{"red"}.
+#' @param landscape_transparency The transparency value to use for the size landscape. Must be on a zero to one scale. Default is \code{0.5}.
+#' @param landscape_weight The "weight" to use for interpolating the colour of each size landscape tile. This is used to vary how much proximity to the tile is taken into account and can be any positive number (default is \code{0.1}).
+#' @param x_tile_apron How far to extend the size landscape horizontally beyond the data points. Should be a number greater than 1 (default is \code{1.2}). By 50\% would be 1.5.
+#' @param y_tile_apron How far to extend the size landscape vertically beyond the data points. Should be a number greater than 1 (default is \code{1.2}). By 50\% would be 1.5.
 #'
 #' @details
 #'
@@ -75,6 +84,9 @@
 #'   "Lophorhinus_willodenensis", "Proburnetia_viatkensis", "Lende_chiweta",
 #'   "Paraburnetia_sneeubergensis", "Burnetia_mirabilis", "BP_1_7098"))
 #'
+#' # Set class as taxonGroups:
+#' class(taxon_groups) <- "taxonGroups"
+#'
 #' # Plot taxon groups including convex hulls:
 #' plot_morphospace(pcoa_input = pcoa_input, z_axis = 3, plot_taxon_names = TRUE,
 #'   taxon_groups = taxon_groups, plot_convex_hulls = TRUE)
@@ -126,13 +138,16 @@
 #'   taxon_groups = taxon_groups, plot_convex_hulls = TRUE)
 #' }
 #' @export plot_morphospace
-plot_morphospace <- function(pcoa_input, x_axis = 1, y_axis = 2, z_axis = NULL, taxon_groups = NULL, plot_taxon_names = FALSE, plot_convex_hulls = FALSE, plot_internal_nodes = FALSE, plot_edges = TRUE, plot_root = TRUE, root_colour = "red", palette = "viridis", plot_group_legend = TRUE, group_legend_position = "top_right", plot_z_legend = TRUE, z_legend_position = "bottom_right", inform = TRUE, x_limits = NULL, y_limits = NULL) {
+plot_morphospace <- function(pcoa_input, x_axis = 1, y_axis = 2, z_axis = NULL, taxon_groups = NULL, plot_taxon_names = FALSE, plot_convex_hulls = FALSE, plot_internal_nodes = FALSE, plot_edges = TRUE, plot_root = TRUE, root_colour = "red", palette = "viridis", plot_group_legend = TRUE, group_legend_position = "top_right", plot_z_legend = TRUE, z_legend_position = "bottom_right", inform = TRUE, x_limits = NULL, y_limits = NULL, plot_size_landscape = FALSE, size_variable = NULL, n_x_tiles = 20, n_y_tiles = 20, landscape_colour = "green", landscape_transparency = 0.5, landscape_weight = 0.1, x_tile_apron = 1.2, y_tile_apron = 1.2) {
   
   # TO DO:
   #
   # - Order points by z-value so they are actually plotted from "back" to "front".
   # - Add plot_node_names option.
   # - Check inputs.
+
+  # If not a valid taxonGroups object then stop and provide feedback to user on what is wrong:
+  if (!is.null(x = taxon_groups) && !is.taxonGroups(x = taxon_groups)) stop(check_taxonGroups(taxon_groups = x)[1])
 
   # Check group_legend_position is a valid value and stop and warn user if not:
   if (!group_legend_position %in% c("bottom_left", "bottom_right", "top_left", "top_right")) stop("group_legend_position must be one of \"bottom_left\", \"bottom_right\", \"top_left\", or \"top_right\".")
@@ -243,6 +258,126 @@ plot_morphospace <- function(pcoa_input, x_axis = 1, y_axis = 2, z_axis = NULL, 
   # Create the basic plot space (will be empty for now):
   graphics::plot(x = pcoa_input$vectors[, x_axis], y = pcoa_input$vectors[, y_axis], type = "n", bg = "black", xlab = x_lab, ylab = y_lab, asp = TRUE, xlim = x_limits, ylim = y_limits)
   
+  
+  
+  
+  
+  ### ADD TILES HERE
+  
+  # If plotting size "landscape" as bottom layer of plot:
+  if (plot_size_landscape) {
+  
+    # Set tile edges by multiplying x and y limits by apron values:
+    tile_x_limits <- x_limits * x_tile_apron
+    tile_y_limits <- y_limits * y_tile_apron
+
+    # Set tile size (width and height):
+    x_tile_size <- diff(x = tile_x_limits) / n_x_tiles
+    y_tile_size <- diff(x = tile_y_limits) / n_y_tiles
+
+    # Make vector of taxa to weigh when deciding tile colour (avoids issues with taxa that have no size data or internal nodes):
+    taxa_to_weigh <- intersect(rownames(x = pcoa_input$vectors), names(x = size_variable))
+  
+    # Create list of tiles with plotting coordinates and starting colour value:
+    tiles <- apply(
+      X = expand.grid(x = 1:n_x_tiles, y = 1:n_y_tiles), # Make every tile
+      MARGIN = 1, # By row (tile)
+      FUN = function(i) {
+      
+        # Set i and j:
+        j <- i[2]
+        i <- i[1]
+      
+        # Set x coordinates of tile:
+        x <- c(
+          top_left = tile_x_limits[1] + (x_tile_size * (i - 1)),
+          top_right = tile_x_limits[1] + (x_tile_size * i),
+          bottom_right = tile_x_limits[1] + (x_tile_size * i),
+          bottom_left = tile_x_limits[1] + (x_tile_size * (i - 1))
+        )
+      
+        # Set y coordinates of tile:
+        y <- c(
+          top_left = tile_y_limits[1] + (y_tile_size * j),
+          top_right = tile_y_limits[1] + (y_tile_size * j),
+          bottom_right = tile_y_limits[1] + (y_tile_size * (j - 1)),
+          bottom_left = tile_y_limits[1] + (y_tile_size * (j - 1))
+        )
+      
+        # Set centre coordinates of tile:
+        centre <- c(x = tile_x_limits[1] + (x_tile_size * (i - 0.5)), y = tile_y_limits[1] + (y_tile_size * (j - 0.5)))
+      
+        # Set distances from tile centre to each taxon to weigh:
+        distances_to_centre <- sqrt(x = ((centre[1] - pcoa_input$vectors[taxa_to_weigh, x_axis]) ^ 2) + ((centre[2] - pcoa_input$vectors[taxa_to_weigh, y_axis]) ^ 2))
+
+        # Convert distances to weights by taking inverse of product of distance and landscape_weight term:
+        z_weights <- 1 / (distances_to_centre ^ landscape_weight)
+      
+        # If any weights are infinity (sampling exactly a data point):
+        if (any(x = z_weights == Inf)) {
+          # Set tile_value as exactly the sampled data point (or mean of multiple data points):
+          tile_value <- mean(x = size_variable[names(x = z_weights[z_weights == Inf])])
+        # If no weights are infinite:
+        } else {
+          # Set tile_value as a weighted mean:
+          tile_value <- sum(x = size_variable[taxa_to_weigh] * z_weights) / sum(x = z_weights)
+        }
+      
+        # Compile output for tiles:
+        list(x = x, y = y, centre = centre, tile_value = tile_value)
+      }
+    )
+  
+    # Get just tile_values:
+    tile_values <- unlist(x = lapply(X = tiles, FUN = function(i) i$tile_value))
+  
+    # Place tile_values on a 0 to 1 scale:
+    tile_values <- tile_values - min(tile_values)
+    tile_values <- tile_values / max(x = tile_values)
+  
+    # Add rescaled tile_values back into tiles list:
+    tiles <- lapply(
+      X = 1:length(tiles),
+      FUN = function(i) {
+        x <- tiles[[i]]
+        x$tile_value <- tile_values[i]
+        x
+      }
+    )
+  
+    # Plot tiles:
+    if (landscape_colour == "red") {
+      plot_tiles <- lapply(
+        X = tiles,
+        FUN = function(i) {
+          graphics::polygon(x = i$x, y = i$y, col = rgb(red = 1, green = 1 - i$tile_value, blue = 1 - i$tile_value, alpha = landscape_transparency), border = 0)
+        }
+      )
+    }
+    if (landscape_colour == "green") {
+      plot_tiles <- lapply(
+        X = tiles,
+        FUN = function(i) {
+          graphics::polygon(x = i$x, y = i$y, col = rgb(red = 1 - i$tile_value, green = 1, blue = 1 - i$tile_value, alpha = landscape_transparency), border = 0)
+        }
+      )
+    }
+    if (landscape_colour == "blue") {
+      plot_tiles <- lapply(
+        X = tiles,
+        FUN = function(i) {
+          graphics::polygon(x = i$x, y = i$y, col = rgb(red = 1 - i$tile_value, green = 1 - i$tile_value, blue = 1, alpha = landscape_transparency), border = 0)
+        }
+      )
+    }
+  }
+  ###
+  
+  
+  
+  
+  
+  
   # Sort vectors by node number (1:N):
   if (tree_used) pcoa_input$vectors <- pcoa_input$vectors[c(pcoa_input$time_tree$tip.label, setdiff(x = rownames(x = pcoa_input$vectors), y = pcoa_input$time_tree$tip.label)), ]
   
@@ -322,11 +457,14 @@ plot_morphospace <- function(pcoa_input, x_axis = 1, y_axis = 2, z_axis = NULL, 
 #time_tree$root.time <- 419.7
 #cladistic_matrix <- read_nexus_matrix("http://www.graemetlloyd.com/nexus/Lloyd_etal_2012a.nex")
 #pcoa_input <- ordinate_cladistic_matrix(cladistic_matrix = cladistic_matrix, time_tree = time_tree)
-#x_axis = 1
-#y_axis = 2
-#taxon_groups = assign_taxa_to_bins(taxon_ages, named_time_bins) ### NEW PARAM
-#plot_taxon_names = TRUE
-#plot_internal_nodes = TRUE
+#x_axis = 2
+#y_axis = 3
+#taxon_ages <- Dipnoi$ages
+#time_bins <- matrix(data = c(418.7, 300, 300, 0), ncol = 2, dimnames = list(c("BinA", "BinB"), c("fad", "lad"))); class(time_bins) <- "timeBins"
+#taxon_groups = assign_taxa_to_bins(taxon_ages, time_bins) ### NEW PARAM
+#plot_taxon_names = FALSE
+#plot_internal_nodes = FALSE
+#plot_edges = TRUE
 #plot_root = TRUE
 #root_colour = "red"
 #palette = "viridis"
@@ -334,3 +472,40 @@ plot_morphospace <- function(pcoa_input, x_axis = 1, y_axis = 2, z_axis = NULL, 
 #group_legend_position = "top_right"
 #plot_z_legend = TRUE
 #z_legend_position = "bottom_right"
+#inform = TRUE
+#z_axis = NULL
+#x_limits = NULL
+#y_limits = NULL
+#plot_size = TRUE
+#plot_convex_hulls = FALSE
+#size_variable <- phytools::fastBM(time_tree, a = 100, mu = 1, sig2 = 1)
+#plot_morphospace(
+#  pcoa_input,
+#  x_axis = 1,
+#  y_axis = 2,
+#  z_axis = NULL,
+#  taxon_groups = NULL,
+#  plot_taxon_names = FALSE,
+#  plot_convex_hulls = FALSE,
+#  plot_internal_nodes = FALSE,
+#  plot_edges = TRUE,
+#  plot_root = TRUE,
+#  root_colour = "red",
+#  palette = "viridis",
+#  plot_group_legend = TRUE,
+#  group_legend_position = "top_right",
+#  plot_z_legend = TRUE,
+#  z_legend_position = "bottom_right",
+#  inform = TRUE,
+#  x_limits = NULL,
+#  y_limits = NULL,
+#  plot_size_landscape = TRUE,
+#  size_variable = size_variable,
+#  n_x_tiles = 50,
+#  n_y_tiles = 50,
+#  landscape_colour = "green",
+#  landscape_transparency = 0.5,
+#  landscape_weight = 0.1,
+#  x_tile_apron = 4,
+#  y_tile_apron = 2
+#)

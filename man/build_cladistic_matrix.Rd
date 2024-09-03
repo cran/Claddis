@@ -21,7 +21,7 @@ build_cladistic_matrix(
 
 \item{character_weights}{A vector specifying the weights used (if not specified defaults to 1).}
 
-\item{ordering}{A vector indicating whether characters are ordered ("ord") or unordered ("unord") (if no specified defaults to ordered).}
+\item{ordering}{A vector indicating whether characters are ordered (\code{"ordered"}) or unordered (\code{"unordered"}) (if no specified defaults to ordered).}
 
 \item{symbols}{The symbols to use if writing to a file (defaults to the numbers 0:9 then the letters A to V).}
 
@@ -30,8 +30,8 @@ build_cladistic_matrix(
 \item{ignore_duplicate_taxa}{Logical indicating whether or not to ignore (allow; TRUE) duplicate taxa or not (FALSE; default).}
 }
 \value{
-\item{topper}{Contains any header text or step matrices and pertains to the entire file.}
-\item{matrix_N}{One or more matrix blocks (numbered 1 to N) with associated information pertaining only to that matrix block. This includes the block name (if specificed, NA if not), the block datatype (one of "CONTINUOUS", "DNA", "NUCLEOTIDE", "PROTEIN", "RESTRICTION", "RNA", or "STANDARD"), the actual matrix (taxa as rows, names stored as rownames and characters as columns), the ordering type of each character ("ord" = ordered, "unord" = unordered), the character weights, the minimum and maximum values (used by Claddis' distance functions), and the original characters (symbols, missing, and gap values) used for writing out the data.}
+\item{topper}{Contains any header text or costmatrices and pertains to the entire file.}
+\item{matrix_N}{One or more matrix blocks (numbered 1 to N) with associated information pertaining only to that matrix block. This includes the block name (if specificed, NA if not), the block datatype (one of "CONTINUOUS", "DNA", "NUCLEOTIDE", "PROTEIN", "RESTRICTION", "RNA", or "STANDARD"), the actual matrix (taxa as rows, names stored as rownames and characters as columns), the ordering type of each character (\code{"ordered"}, \code{"unordered"} etc.), the character weights, the minimum and maximum values (used by Claddis' distance functions), and the original characters (symbols, missing, and gap values) used for writing out the data.}
 }
 \description{
 Creates a morphological data file from a character-taxon matrix.
@@ -39,7 +39,7 @@ Creates a morphological data file from a character-taxon matrix.
 \details{
 Claddis generally assumes that matrices will be imported into R from the #NEXUS format, but in some cases (e.g., when using simulated data) it might be desirable to build a matrix within R. This function allows the user to convert such a matrix into the format required by other Claddis functions as long as it only contains a single block.
 
-NB: Currently the function cannot deal directly with step matrices or continuous characters.
+NB: Currently the function cannot deal directly with costmatrices or continuous characters.
 }
 \examples{
 
@@ -60,7 +60,7 @@ nrow = 10, dimnames =
 build_cladistic_matrix(character_taxon_matrix)
 }
 \seealso{
-\link{compactify_matrix}, \link{prune_cladistic_matrix}, \link{read_nexus_matrix}, \link{safe_taxonomic_reduction}, \link{write_nexus_matrix}, \link{write_tnt_matrix}
+\link{compactify_cladistic_matrix}, \link{prune_cladistic_matrix}, \link{read_nexus_matrix}, \link{safe_taxonomic_reduction}, \link{write_nexus_matrix}, \link{write_tnt_matrix}
 }
 \author{
 Graeme T. Lloyd \email{graemetlloyd@gmail.com}

@@ -30,17 +30,18 @@
 #' michaux_1989$matrix_1$character_weights
 #'
 #' # Compactify the matrix:
-#' michaux_1989compact <- compactify_matrix(michaux_1989)
+#' michaux_1989compact <- compactify_cladistic_matrix(michaux_1989)
 #'
 #' # Examine the matrix post-compactification:
 #' michaux_1989compact$matrix_1$matrix
 #'
 #' # Examine the weights post-compactification:
 #' michaux_1989compact$matrix_1$character_weights
-#' @export compactify_matrix
-compactify_matrix <- function(cladistic_matrix, message = TRUE) {
+#'
+#' @export compactify_cladistic_matrix
+compactify_cladistic_matrix <- function(cladistic_matrix, message = TRUE) {
 
-  # FUTURE COULD CHECK FOR UNORD AND ORD WHEN BINARY AND HENCE MEANINGLESS
+  # FUTURE COULD CHECK FOR UNORDERED AND ORDERED WHEN BINARY AND HENCE MEANINGLESS
 
   # Check cladistic_matrix has class cladisticMatrix and stop and warn user if not:
   if (!inherits(x = cladistic_matrix, what = "cladisticMatrix")) stop("cladistic_matrix must be an object of class \"cladisticMatrix\".")
@@ -148,7 +149,7 @@ compactify_matrix <- function(cladistic_matrix, message = TRUE) {
               cladistic_matrix[[i]]$maximum_values <- unlist(x = lapply(X = character_ranges, "[", 2))
             }
 
-            # If duplicated rows are not variable:
+          # If duplicated rows are not variable:
           } else {
 
             # Remove all but one duplicated row from the matrix:
@@ -157,7 +158,7 @@ compactify_matrix <- function(cladistic_matrix, message = TRUE) {
         }
       }
 
-      # Case if matrix cannot be compactified:
+    # Case if matrix cannot be compactified:
     } else {
 
       # Print message to user:

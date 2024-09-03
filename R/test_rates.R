@@ -6,7 +6,7 @@
 #'
 #' @param time_tree A tree (phylo object) with branch durations that represents the relationships of the taxa in \code{cladistic_matrix}.
 #' @param cladistic_matrix A character-taxon matrix in the format imported by \link{read_nexus_matrix}.
-#' @param time_bins A vector of ages (in millions of years) indicating the boundaries of a series of time bins in order from oldest to youngest.
+#' @param time_bins An object of class \code{timeBins}.
 #' @param branch_partitions A list of branch(es) (edge number) partitions to test as N-rate parameter model (where N is the total number of partitions). If NULL (the default) then no partition test(s) will be made.
 #' @param character_partitions A list of character partition(s) (character numbers) to test as N-rate parameter model (where N is the total number of partitions). If NULL (the default) then no partition test(s) will be made.
 #' @param clade_partitions A list of clade partition(s) (node numbers) to test as N-rate parameter model (where N is the total number of partitions). If NULL (the default) then no partition test(s) will be made.
@@ -32,7 +32,7 @@
 #'
 #' \bold{Introduction}
 #'
-#' Morphological change can be captured by discrete characters and their evolution modelled as occurring along the branches of a phylogenetic tree. This function takes as primary input a character-taxon matrix of discrete characters (in the format imported by \link{read_nexus_matrix}) and a time-scaled phylogenetic tree (in the format of \pkg{paleotree} or \pkg{strap}) and begins by inferring ancestral states at the tree's internal nodes using the \link{estimate_ancestral_states} function. From here changes along individual branches can be estimated (only the minimum number of changes are inferred; see \link{map_stochastic_changes} for an alternative but unfinished approach) and hence rates can be calculated.
+#' Morphological change can be captured by discrete characters and their evolution modelled as occurring along the branches of a phylogenetic tree. This function takes as primary input a character-taxon matrix of discrete characters (in the format imported by \link{read_nexus_matrix}) and a time-scaled phylogenetic tree (in the format of \pkg{paleotree} or \pkg{strap}) and begins by inferring ancestral states at the tree's internal nodes using the \link{estimate_ancestral_states} function. From here changes along individual branches can be estimated (only the minimum number of changes are inferred; see \code{map_stochastic_changes} for an alternative but unfinished approach) and hence rates can be calculated.
 #'
 #' A discrete character rate can be expressed as the mean number of changes per million years (users may wish to normalise this by the number of characters for interpretation) and can be calculated for a branch (edge) of the tree, a clade (a mean rate for the edges descended from a single node), a character partition (the mean rate for a subset of the characters across all edges), or, most complex (see Lloyd 2016), the mean rate across the edges (or parts of edges) present in a time bin (defined by two values denoting the beginning and end of the time bin). In an ideal scenario these rates could be compared at face value, but that would require a large number of characters and very minimal (or zero) missing data. I.e., at an extreme of missing data if only one character can be observed along a branch it will either change (the maximum possible inferrable rate of evolution) or it will not (the minimum possible inferrable rate of evolution). In such cases it would be unwise to consider either outcome as being a significant departure from the mean rate.
 #'
@@ -93,7 +93,7 @@
 #'
 #' Finally, the remaining options (\code{estimate_all_nodes}, \code{estimate_tip_values}, \code{inapplicables_as_missing}, \code{polymorphism_behaviour}, \code{uncertainty_behaviour}, and \code{threshold}) are all simply passed directly to \link{estimate_ancestral_states} for estimating the ancestral states and users should consult the help file for that function for further details.
 #'
-#' Note that currently the function cannot deal with step matrices and that the terminal versus internal option from Brusatte et al. (2014) is yet to be implemented.
+#' Note that currently the function cannot deal with costmatrices and that the terminal versus internal option from Brusatte et al. (2014) is yet to be implemented.
 #'
 #' \bold{Output}
 #'
@@ -171,36 +171,62 @@
 #' # Set root time by making youngest taxon extant:
 #' time_tree$root.time <- max(diag(x = ape::vcv(phy = time_tree)))
 #'
+#' # Set four equal ength time bins spanning range of tree:
+#' time_bins <- matrix(data = c(seq(from = time_tree$root.time, to = 0,
+#'   length.out = 5)[1:4], seq(from = time_tree$root.time, to = 0,
+#'   length.out = 5)[2:5]), ncol = 2, dimnames = list(LETTERS[1:4],
+#'   c("fad", "lad")))
+#'
+#' # Set class as timeBins:
+#' class(time_bins) <- "timeBins"
+#'
 #' # Get discrete character rates:
 #' x <- test_rates(
-#'   time_tree = time_tree, cladistic_matrix =
-#'     michaux_1989, time_bins = seq(
-#'     from = time_tree$root.time,
-#'     to = 0, length.out = 5
-#'   ), branch_partitions =
-#'     lapply(X = as.list(x = 1:nrow(time_tree$edge)), as.list),
-#'   character_partitions = lapply(
-#'     X =
-#'       as.list(x = 1:3),
-#'     as.list
-#'   ), clade_partitions =
-#'     lapply(
-#'       X =
-#'         as.list(x = ape::Ntip(phy = time_tree) + (2:ape::Nnode(phy = time_tree))),
-#'       as.list
-#'     ), time_partitions =
-#'     lapply(X = as.list(x = 1:4), as.list), change_times =
-#'     "random", alpha = 0.01, polymorphism_state =
-#'     "missing", uncertainty_state = "missing",
-#'   inapplicable_state = "missing", time_binning_approach =
-#'     "lloyd"
+#'   time_tree = time_tree,
+#'   cladistic_matrix = michaux_1989,
+#'   time_bins = time_bins,
+#'   branch_partitions = lapply(X = as.list(x = 1:nrow(time_tree$edge)), as.list),
+#'   character_partitions = lapply(X = as.list(x = 1:3), as.list),
+#'   clade_partitions = lapply(X = as.list(x = ape::Ntip(phy = time_tree) +
+#'     (2:ape::Nnode(phy = time_tree))), as.list),
+#'   time_partitions = lapply(X = as.list(x = 1:4), as.list),
+#'   change_times = "random",
+#'   alpha = 0.01,
+#'   polymorphism_state = "missing",
+#'   uncertainty_state = "missing",
+#'   inapplicable_state = "missing",
+#'   time_binning_approach = "lloyd"
 #' )
 #' @export test_rates
-test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions = NULL, character_partitions = NULL, clade_partitions = NULL, time_partitions = NULL, change_times = "random", test_type = "aic", alpha = 0.01, multiple_comparison_correction = "benjaminihochberg", polymorphism_state = "missing", uncertainty_state = "missing", inapplicable_state = "missing", time_binning_approach = "lloyd", all_weights_integers = FALSE, estimate_all_nodes = FALSE, estimate_tip_values = FALSE, inapplicables_as_missing = FALSE, polymorphism_behaviour = "equalp", uncertainty_behaviour = "equalp", threshold = 0.01, all_missing_allowed = FALSE) {
+test_rates <- function(
+  time_tree,
+  cladistic_matrix,
+  time_bins,
+  branch_partitions = NULL,
+  character_partitions = NULL,
+  clade_partitions = NULL,
+  time_partitions = NULL,
+  change_times = "random",
+  test_type = "aic",
+  alpha = 0.01,
+  multiple_comparison_correction = "benjaminihochberg",
+  polymorphism_state = "missing",
+  uncertainty_state = "missing",
+  inapplicable_state = "missing",
+  time_binning_approach = "lloyd",
+  all_weights_integers = FALSE,
+  estimate_all_nodes = FALSE,
+  estimate_tip_values = FALSE,
+  inapplicables_as_missing = FALSE,
+  polymorphism_behaviour = "equalp",
+  uncertainty_behaviour = "equalp",
+  threshold = 0.01,
+  all_missing_allowed = FALSE
+) {
   
-  # MAKE RATES OUTPUT MAKE SENSE BY PROELRY SEPARATING COMPLETENESS AND DURATION
+  # MAKE RATES OUTPUT MAKE SENSE BY PROPERLY SEPARATING COMPLETENESS AND DURATION
 
-  # ADD EXAMPLES OF VISUALISED OUTPUT (MENTION IN MANUAL AN ADD PLOT FUNCTIONS TO SEALSO_
+  # ADD EXAMPLES OF VISUALISED OUTPUT (MENTION IN MANUAL AN ADD PLOT FUNCTIONS TO SEEALSO)
 
   # TO EXCLUDE OUTGROUP CAN JUST SET UP PARTITIONS THAT EXCLUDE THESE (REQUIRES REMOVING PARTITION FIXER AS STANDARD)
   # COULD ALSO DO INTERNAL AND TERMINAL BRANCHES SEPARATELY THIS WAY
@@ -235,8 +261,8 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
   # Check cladistic_matrix has class cladisticMatrix and stop and warn user if not:
   if (!inherits(x = cladistic_matrix, what = "cladisticMatrix")) stop("cladistic_matrix must be an object of class \"cladisticMatrix\".")
 
-  # Check for step matrices and stop and warn user if found:
-  if (is.list(cladistic_matrix$topper$step_matrices)) stop("Function cannot currently deal with step matrices.")
+  # Check for costmatrices and stop and warn user if found:
+  if (is.list(cladistic_matrix$topper$costmatrices)) stop("Function cannot currently deal with costmatrices.")
 
   # Check tree has branch lengths:
   if (is.null(time_tree$edge.length)) stop("time_tree does not have branch lengths (durations). Try timescaling the tree, e.g., with DatePhylo.")
@@ -279,12 +305,12 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
 
   # Get character numbers:
   character_numbers <- 1:sum(unlist(x = lapply(X = lapply(X = cladistic_matrix[2:length(x = cladistic_matrix)], "[[", "matrix"), ncol)))
-
-  # Ensure time bins are in correct order:
-  time_bins <- sort(x = unique(x = time_bins), decreasing = TRUE)
-
+  
+  # Check time_bins is in a valid format and stop and warn user if not:
+  if (!is.timeBins(x = time_bins)) stop(check_timeBins(time_bins = time_bins))
+  
   # Find the Time bin midpoints:
-  time_bin_midpoints <- (time_bins[2:length(x = time_bins)] + time_bins[1:(length(x = time_bins) - 1)]) / 2
+  time_bin_midpoints <- find_time_bin_midpoints(time_bins = time_bins)
 
   # Get the numbers for each time bins:
   time_bin_numbers <- 1:length(x = time_bin_midpoints)
@@ -507,7 +533,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
   continuous_characters_discretized <- FALSE
 
   # Check for continuous characters as these will need to be modified for modelling to discrete characters:
-  if (any(ordering == "cont")) {
+  if (any(ordering == "continuous")) {
 
     # Tell user this is happening:
     cat("Continuous characters found. Converting to gap-weighted discrete characters.\n")
@@ -516,7 +542,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     continuous_characters_discretized <- TRUE
 
     # Find out which characters are continuous:
-    continuous_characters_found <- which(x = ordering == "cont")
+    continuous_characters_found <- which(x = ordering == "continuous")
 
     # Rescale continous characters as zero to one values:
     list_of_continuous_values_rescaled_zero_to_one <- lapply(X = lapply(X = lapply(X = apply(all_states[, continuous_characters_found, drop = FALSE], 2, list), unlist), as.numeric), function(x) {
@@ -529,7 +555,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     all_states[, continuous_characters_found] <- do.call(what = cbind, args = lapply(X = lapply(X = lapply(X = list_of_continuous_values_rescaled_zero_to_one, function(x) as.list(x = x)), lapply, function(x) ifelse(is.na(x), NA, max(which(x = x >= (0:31) / 31)) - 1)), unlist))
 
     # Convert character type to ordered:
-    ordering[continuous_characters_found] <- "ord"
+    ordering[continuous_characters_found] <- "ordered"
 
     # Convert weights to 1/31:
     character_weights[continuous_characters_found] <- 1 / 31
@@ -566,10 +592,10 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     character_differences <- which(x = x$character_states_from_to["from", comparable_characters] != x$character_states_from_to["to", comparable_characters])
 
     # Build character change matrix:
-    character_changes <- matrix(nrow = 0, ncol = 5, dimnames = list(c(), c("character", "from", "to", "steps", "weight")))
+    character_changes <- matrix(nrow = 0, ncol = 5, dimnames = list(c(), c("character", "from", "to", "cost", "weight")))
 
     # If characters change then make a matrix from them:
-    if (length(x = character_differences) > 0) character_changes <- rbind(character_changes, cbind(as.numeric(comparable_characters[character_differences]), as.numeric(x$character_states_from_to["from", comparable_characters[character_differences]]), as.numeric(x$character_states_from_to["to", comparable_characters[character_differences]]), ifelse(comparable_ordering[character_differences] == "unord", 1, abs(as.numeric(x$character_states_from_to["to", comparable_characters[character_differences]]) - as.numeric(x$character_states_from_to["from", comparable_characters[character_differences]]))), comparable_weights[character_differences]))
+    if (length(x = character_differences) > 0) character_changes <- rbind(character_changes, cbind(as.numeric(comparable_characters[character_differences]), as.numeric(x$character_states_from_to["from", comparable_characters[character_differences]]), as.numeric(x$character_states_from_to["to", comparable_characters[character_differences]]), ifelse(comparable_ordering[character_differences] == "unordered", 1, abs(as.numeric(x$character_states_from_to["to", comparable_characters[character_differences]]) - as.numeric(x$character_states_from_to["from", comparable_characters[character_differences]]))), comparable_weights[character_differences]))
 
     # Store character changes as new sublist for x:
     x$character_changes <- character_changes
@@ -593,14 +619,14 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
       # Isolate character changes:
       character_changes <- x$character_changes
 
-      # If any changes involve two or more steps (requiring replacement with multiple changes):
-      if (any(character_changes[, "steps"] > 1)) {
+      # If any changes involve two or more cost (requiring replacement with multiple changes):
+      if (any(character_changes[, "cost"] > 1)) {
 
-        # Get multistep character changes:
-        multistep_characters <- which(x = character_changes[, "steps"] > 1)
+        # Get multicost character changes:
+        multicost_characters <- which(x = character_changes[, "cost"] > 1)
 
-        # For each multistep character change:
-        for (i in rev(multistep_characters)) {
+        # For each multicost character change:
+        for (i in rev(multicost_characters)) {
 
           # Isolate other rows:
           other_row_numbers <- setdiff(x = 1:nrow(character_changes), y = i)
@@ -608,7 +634,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
           # Get unpacked changes (X:Y, e.g., 0:2 would become 0 1 2):
           unpacked_changes <- character_changes[i, "from"]:character_changes[i, "to"]
 
-          # Update character changes with multistep changes unpacked:
+          # Update character changes with multicost changes unpacked:
           character_changes <- rbind(character_changes[other_row_numbers, ], unname(cbind(rep(character_changes[i, "character"], length.out = length(x = unpacked_changes) - 1), unpacked_changes[1:(length(x = unpacked_changes) - 1)], unpacked_changes[2:length(x = unpacked_changes)], rep(1, length.out = length(x = unpacked_changes) - 1), rep(character_changes[i, "weight"], length.out = length(x = unpacked_changes) - 1))))
         }
 
@@ -620,8 +646,8 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
       if (change_times == "midpoint") character_changes <- cbind(character_changes, rep(x$node_age_from_to[1] - (x$branch_duration / 2), length.out = nrow(character_changes)))
 
       # If using spaced then set character change times as equally spaced along branch:
-      if (change_times == "spaced") character_changes <- cbind(character_changes, x$node_age_from_to[1] - (seq(from = 0, to = x$branch_duration, length.out = nrow(character_changes) + 1)[1:nrow(character_changes)] + (diff(seq(from = 0, to = x$branch_duration, length.out = nrow(character_changes) + 1))[1] / 2)))
-
+      if (change_times == "spaced") character_changes <- cbind(character_changes, x$node_age_from_to[1] - (cumsum(x = rep(x = x$branch_duration / nrow(x = character_changes), times = nrow(x = character_changes))) - (x$branch_duration / nrow(x = character_changes) / 2)))
+      
       # If using random then set character change times as random draws from a uniform distribution:
       if (change_times == "random") character_changes <- cbind(character_changes, x$node_age_from_to[1] - stats::runif(n = nrow(character_changes), min = 0, max = x$branch_duration))
 
@@ -642,7 +668,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
       character_changes <- sort_change_times(character_changes)
 
       # Add bin for character change as last column:
-      character_changes <- cbind(character_changes, unlist(x = lapply(X = as.list(x = character_changes[, "time"]), function(x) max(which(x = x <= time_bins)))))
+      character_changes <- cbind(character_changes, unlist(x = lapply(X = as.list(x = character_changes[, "time"]), function(x) max(which(x = x <= time_bins[, "fad"])))))
 
       # Add column name to change time column:
       colnames(x = character_changes)[ncol(character_changes)] <- "bin"
@@ -668,7 +694,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     lad <- x$node_age_from_to[2]
 
     # Get any time bin boundaries crossed (can be empty if none are):
-    boundaries_crossed <- time_bins[2:(length(x = time_bins) - 1)][intersect(which(x = time_bins[2:(length(x = time_bins) - 1)] > lad), which(x = time_bins[2:(length(x = time_bins) - 1)] < fad))]
+    boundaries_crossed <- unname(obj = time_bins[, "lad"][intersect(which(x = time_bins[, "lad"] > lad), which(x = time_bins[, "lad"] < fad))])
 
     # If boundaries are crossed:
     if (length(x = boundaries_crossed) > 0) {
@@ -684,7 +710,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     branch_sections <- rbind(fad, lad)
 
     # Add bin number present in to column names:
-    colnames(x = branch_sections) <- unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = branch_sections["fad", ]), "<=", time_bins), which), max))
+    colnames(x = branch_sections) <- unlist(x = lapply(X = as.list(x = branch_sections["fad", ]), function(x) max(which(x = x <= time_bins[, "fad"]))))
 
     # Add new list section for branch (edge) sections binned by time:
     x$binned_edge_sections <- branch_sections
@@ -698,7 +724,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
 
   # Add binned branch durations to edge list:
   edge_list <- lapply(X = edge_list, function(x) {
-    branch_durations <- rep(0, length(x = time_bins) - 1)
+    branch_durations <- rep(0, nrow(x = time_bins))
     branch_durations[as.numeric(colnames(x = x$binned_edge_sections))] <- abs(apply(x$binned_edge_sections, 2, diff))
     x$binned_branch_durations <- branch_durations
     x
@@ -732,7 +758,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
   if (!is.null(branch_partitions) || !is.null(clade_partitions)) {
 
     # Get (weighted) number of changes on each edge:
-    edge_changes <- unlist(x = lapply(X = edge_list, function(x) sum(x$character_changes[, "steps"] * x$character_changes[, "weight"])))
+    edge_changes <- unlist(x = lapply(X = edge_list, function(x) sum(x$character_changes[, "cost"] * x$character_changes[, "weight"])))
 
     # Get completeness for each edge:
     edge_completeness <- unlist(x = lapply(X = edge_list, function(x) sum(character_weights[x$comparable_characters]) / sum(character_weights)))
@@ -868,7 +894,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
     # Get vector of (weighted) changes for each character:
     character_changes <- unlist(x = lapply(X = as.list(x = character_numbers), function(x) {
       character_rows <- which(x = inferred_character_changes[, "character"] == x)
-      sum(inferred_character_changes[character_rows, "steps"] * inferred_character_changes[character_rows, "weight"])
+      sum(inferred_character_changes[character_rows, "cost"] * inferred_character_changes[character_rows, "weight"])
     }))
 
     # Get vector of weighted durations for each character:
@@ -943,15 +969,15 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
   if (!is.null(time_partitions)) {
 
     # Get weighted number of changes from each time bin:
-    time_bin_changes <- unlist(x = lapply(X = as.list(x = 1:(length(x = time_bins) - 1)), function(x) {
+    time_bin_changes <- unlist(x = lapply(X = as.list(x = 1:nrow(x = time_bins)), function(x) {
       change_rows <- inferred_character_changes[, "bin"] == x
-      sum(inferred_character_changes[change_rows, "steps"] * inferred_character_changes[change_rows, "weight"])
+      sum(inferred_character_changes[change_rows, "cost"] * inferred_character_changes[change_rows, "weight"])
     }))
 
     # If using the Close time bin completeness approach get completeness value for each time bin:
     if (time_binning_approach == "close") time_bin_completeness <- apply(do.call(what = rbind, args = lapply(X = edge_list, function(x) x$proportional_binned_edge_durations * (sum(character_weights[x$comparable_characters]) / sum(character_weights)))), 2, sum) / apply(do.call(what = rbind, args = lapply(X = edge_list, function(x) x$proportional_binned_edge_durations)), 2, sum)
 
-    # If using the Lloyd time bin completeness approach get completeness value for each time bin::
+    # If using the Lloyd time bin completeness approach get completeness value for each time bin:
     if (time_binning_approach == "lloyd") time_bin_completeness <- apply(do.call(what = rbind, args = lapply(X = edge_list, function(x) apply(matrix(character_weights[x$comparable_characters], ncol = 1) %*% x$binned_branch_durations, 2, sum))), 2, sum) / apply(do.call(what = rbind, args = lapply(X = edge_list, function(x) apply(matrix(character_weights, ncol = 1) %*% x$binned_branch_durations, 2, sum))), 2, sum)
 
     # Get durations of edges in each time bin:
@@ -959,12 +985,12 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
 
     # Set global rate (NB: will differ between Close and Lloyd approaches, but Lloyd approach will match edge or character global rate):
     global_rate <- sum(time_bin_changes) / sum(time_bin_completeness * time_bin_durations)
-
+    
     # Create time rates for output:
-    time_rates <- lapply(X = list(as.list(x = 1:(length(x = time_bins) - 1))), function(x) matrix(unlist(x = lapply(X = x, function(y) c(sum(time_bin_changes[y]), sum(time_bin_completeness[y] * time_bin_durations[y]), 1))), ncol = 3, byrow = TRUE, dimnames = list(c(), c("changes", "completeness", "duration"))))[[1]]
+    time_rates <- lapply(X = list(as.list(x = 1:nrow(x = time_bins))), function(x) matrix(unlist(x = lapply(X = x, function(y) c(sum(time_bin_changes[y]), sum(time_bin_completeness[y] * time_bin_durations[y]), 1))), ncol = 3, byrow = TRUE, dimnames = list(c(), c("changes", "completeness", "duration"))))[[1]]
 
     # Add bin numbers and rates:
-    time_rates <- cbind(bin = 1:(length(x = time_bins) - 1), rate = as.numeric(gsub(pattern = NaN, replacement = 0, x = time_rates[, "changes"] / time_rates[, "completeness"])), time_rates)
+    time_rates <- cbind(bin = 1:nrow(x = time_bins), rate = as.numeric(gsub(pattern = NaN, replacement = 0, x = time_rates[, "changes"] / time_rates[, "completeness"])), time_rates)
 
     # If using Likelihood Ratio Test to compare partitions:
     if (test_type == "lrt") {
@@ -1016,13 +1042,13 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
   }
 
   # Set global rate for output:
-  global_rate <- sum(unlist(x = lapply(X = edge_list, function(x) sum(x$character_changes[, "steps"] * x$character_changes[, "weight"])))) / sum(unlist(x = lapply(X = edge_list, function(x) sum(character_weights[x$comparable_characters]) / sum(character_weights))) * unlist(x = lapply(X = edge_list, function(x) x$branch_duration)))
+  global_rate <- sum(unlist(x = lapply(X = edge_list, function(x) sum(x$character_changes[, "cost"] * x$character_changes[, "weight"])))) / sum(unlist(x = lapply(X = edge_list, function(x) sum(character_weights[x$comparable_characters]) / sum(character_weights))) * unlist(x = lapply(X = edge_list, function(x) x$branch_duration)))
 
   # If performing Likelihood Ratio Test:
   if (test_type == "lrt") {
 
     # Subfunction to calculate adjusted alphas for multiple comparison corrections:
-    add_cutoffs <- function(test_results, alpha, multiple_comparison_correction = multiple_comparison_correction) {
+    add_cutoffs <- function(test_results, alpha, multiple_comparison_correction) {
 
       # Get number of comparisons performed:
       n_comparisons <- length(x = test_results)
@@ -1070,7 +1096,7 @@ test_rates <- function(time_tree, cladistic_matrix, time_bins, branch_partitions
 # Ages <- read.table("~/Documents/Packages/Claddis/LungfishTest/ages.txt", sep = ",")
 # Matrix <- Claddis::read_nexus_matrix("~/Documents/Packages/Claddis/LungfishTest/Lloyd_etal_2012a.nex")
 # time_tree <- ape::read.tree("~/Documents/Packages/Claddis/LungfishTest/Lloyd_etal_2012a.tre")
-# time_bins <- c(443.8, 419.2, 358.9, 298.9, 251.9, 201.3, 145.0, 0.0)
+# time_bins <- ### NEED CHANGING TO NEW FORMAT!!!!! c(443.8, 419.2, 358.9, 298.9, 251.9, 201.3, 145.0, 0.0)
 #
 # time_tree <- time_tree[sample(1:100000, 100)]
 # time_tree <- lapply(X = time_tree, function(x) strap::DatePhylo(x, Ages, rlen = 2, method = "equal"))

@@ -31,9 +31,9 @@ plot_morphospace_stack(
 
 \item{taxon_ages}{A two-column matrix of the first and last apperance dates (columns; \code{"fad"} and \code{"lad"}) for the taxa (as rownames) from \code{pcoa_input}.}
 
-\item{taxon_groups}{A named list of groups to which taxa are assigned (optional). This is used to plot points or convex hulls in different colours corresponding to each group. As the user names the groups these can represent any grouping of interest (e.g., taxonomic, ecological, temporal, spatial).}
+\item{taxon_groups}{An object of class \code{taxonGroups}.}
 
-\item{time_bins}{Another two-column matrix of the first and last appearance dates (columns; \code{"fad"} and \code{"lad"}), this time for named (rownames) time-slices .}
+\item{time_bins}{An object of class \code{timeBins}.}
 
 \item{shear}{A single value (between 0 and 1) that determines the "sheared" visual appearance of the platforms.}
 
@@ -95,23 +95,29 @@ pcoa_input <- ordinate_cladistic_matrix(cladistic_matrix = prune_cladistic_matri
   cladistic_matrix = day_2016,
   taxa2prune = "Lycaenodon_longiceps"))
 
-# Build simple taxonomic groups fro Day et al 2016 daat set:
+# Build simple taxonomic groups for Day et al 2016 daat set:
 taxon_groups <- list(nonBurnetiamorpha = c("Biarmosuchus_tener", "Hipposaurus_boonstrai",
   "Bullacephalus_jacksoni", "Pachydectes_elsi", "Niuksenitia_sukhonensis", "Ictidorhinus_martinsi",
   "RC_20", "Herpetoskylax_hopsoni"), Burnetiamorpha = c("Lemurosaurus_pricei", "Lobalopex_mordax",
   "Lophorhinus_willodenensis", "Proburnetia_viatkensis", "Lende_chiweta",
   "Paraburnetia_sneeubergensis", "Burnetia_mirabilis", "BP_1_7098"))
 
+# Set class as taxonGroups:
+class(taxon_groups) <- "taxonGroups"
+
 # Build a sequence of equally spaced time bins spanning Day et al. 2016 data:
 time_sequence <- seq(from = 270, to = 252, length.out = 6)
 
-# Reformt this sequence into named time bin matrix:
+# Reformat this sequence into named time bin matrix:
 time_bins <- matrix(
   data = c(time_sequence[1:(length(x = time_sequence) - 1)],
   time_sequence[2:length(x = time_sequence)]),
   ncol = 2,
   dimnames = list(c("Bin 1", "Bin 2", "Bin 3", "Bin 4", "Bin 5"), c("fad", "lad"))
 )
+
+# Set class as timeBins:
+class(time_bins) <- "timeBins"
 
 # Plot morphospace stack using named time bins:
 plot_morphospace_stack(

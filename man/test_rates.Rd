@@ -35,7 +35,7 @@ test_rates(
 
 \item{cladistic_matrix}{A character-taxon matrix in the format imported by \link{read_nexus_matrix}.}
 
-\item{time_bins}{A vector of ages (in millions of years) indicating the boundaries of a series of time bins in order from oldest to youngest.}
+\item{time_bins}{An object of class \code{timeBins}.}
 
 \item{branch_partitions}{A list of branch(es) (edge number) partitions to test as N-rate parameter model (where N is the total number of partitions). If NULL (the default) then no partition test(s) will be made.}
 
@@ -98,7 +98,7 @@ Given a tree and a cladistic-type matrix uses either likelihood ratio tests or t
 \details{
 \bold{Introduction}
 
-Morphological change can be captured by discrete characters and their evolution modelled as occurring along the branches of a phylogenetic tree. This function takes as primary input a character-taxon matrix of discrete characters (in the format imported by \link{read_nexus_matrix}) and a time-scaled phylogenetic tree (in the format of \pkg{paleotree} or \pkg{strap}) and begins by inferring ancestral states at the tree's internal nodes using the \link{estimate_ancestral_states} function. From here changes along individual branches can be estimated (only the minimum number of changes are inferred; see \link{map_stochastic_changes} for an alternative but unfinished approach) and hence rates can be calculated.
+Morphological change can be captured by discrete characters and their evolution modelled as occurring along the branches of a phylogenetic tree. This function takes as primary input a character-taxon matrix of discrete characters (in the format imported by \link{read_nexus_matrix}) and a time-scaled phylogenetic tree (in the format of \pkg{paleotree} or \pkg{strap}) and begins by inferring ancestral states at the tree's internal nodes using the \link{estimate_ancestral_states} function. From here changes along individual branches can be estimated (only the minimum number of changes are inferred; see \code{map_stochastic_changes} for an alternative but unfinished approach) and hence rates can be calculated.
 
 A discrete character rate can be expressed as the mean number of changes per million years (users may wish to normalise this by the number of characters for interpretation) and can be calculated for a branch (edge) of the tree, a clade (a mean rate for the edges descended from a single node), a character partition (the mean rate for a subset of the characters across all edges), or, most complex (see Lloyd 2016), the mean rate across the edges (or parts of edges) present in a time bin (defined by two values denoting the beginning and end of the time bin). In an ideal scenario these rates could be compared at face value, but that would require a large number of characters and very minimal (or zero) missing data. I.e., at an extreme of missing data if only one character can be observed along a branch it will either change (the maximum possible inferrable rate of evolution) or it will not (the minimum possible inferrable rate of evolution). In such cases it would be unwise to consider either outcome as being a significant departure from the mean rate.
 
@@ -159,7 +159,7 @@ Sixthly, all character changes are weighted according to the weights provided in
 
 Finally, the remaining options (\code{estimate_all_nodes}, \code{estimate_tip_values}, \code{inapplicables_as_missing}, \code{polymorphism_behaviour}, \code{uncertainty_behaviour}, and \code{threshold}) are all simply passed directly to \link{estimate_ancestral_states} for estimating the ancestral states and users should consult the help file for that function for further details.
 
-Note that currently the function cannot deal with step matrices and that the terminal versus internal option from Brusatte et al. (2014) is yet to be implemented.
+Note that currently the function cannot deal with costmatrices and that the terminal versus internal option from Brusatte et al. (2014) is yet to be implemented.
 
 \bold{Output}
 
@@ -201,29 +201,31 @@ time_tree$tip.label <- rownames(x = michaux_1989$matrix_1$matrix)
 # Set root time by making youngest taxon extant:
 time_tree$root.time <- max(diag(x = ape::vcv(phy = time_tree)))
 
+# Set four equal ength time bins spanning range of tree:
+time_bins <- matrix(data = c(seq(from = time_tree$root.time, to = 0,
+  length.out = 5)[1:4], seq(from = time_tree$root.time, to = 0,
+  length.out = 5)[2:5]), ncol = 2, dimnames = list(LETTERS[1:4],
+  c("fad", "lad")))
+
+# Set class as timeBins:
+class(time_bins) <- "timeBins"
+
 # Get discrete character rates:
 x <- test_rates(
-  time_tree = time_tree, cladistic_matrix =
-    michaux_1989, time_bins = seq(
-    from = time_tree$root.time,
-    to = 0, length.out = 5
-  ), branch_partitions =
-    lapply(X = as.list(x = 1:nrow(time_tree$edge)), as.list),
-  character_partitions = lapply(
-    X =
-      as.list(x = 1:3),
-    as.list
-  ), clade_partitions =
-    lapply(
-      X =
-        as.list(x = ape::Ntip(phy = time_tree) + (2:ape::Nnode(phy = time_tree))),
-      as.list
-    ), time_partitions =
-    lapply(X = as.list(x = 1:4), as.list), change_times =
-    "random", alpha = 0.01, polymorphism_state =
-    "missing", uncertainty_state = "missing",
-  inapplicable_state = "missing", time_binning_approach =
-    "lloyd"
+  time_tree = time_tree,
+  cladistic_matrix = michaux_1989,
+  time_bins = time_bins,
+  branch_partitions = lapply(X = as.list(x = 1:nrow(time_tree$edge)), as.list),
+  character_partitions = lapply(X = as.list(x = 1:3), as.list),
+  clade_partitions = lapply(X = as.list(x = ape::Ntip(phy = time_tree) +
+    (2:ape::Nnode(phy = time_tree))), as.list),
+  time_partitions = lapply(X = as.list(x = 1:4), as.list),
+  change_times = "random",
+  alpha = 0.01,
+  polymorphism_state = "missing",
+  uncertainty_state = "missing",
+  inapplicable_state = "missing",
+  time_binning_approach = "lloyd"
 )
 }
 \references{

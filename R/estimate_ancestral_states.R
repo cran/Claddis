@@ -16,17 +16,17 @@
 #'
 #' @details
 #'
-#' At its' core the function uses either the \link{rerootingMethod} (Yang et al. 1995) as implemented in the \link{phytools} package (for discrete characters) or the \link{ace} function in the \link{ape} package (for continuous characters) to make ancestral state estimates. For discrete characters these are collapsed to the most likely state (or states, given equal likelihoods or likelihood within a defined \code{threshold} value). In the latter case the resulting states are represented as an uncertainty (i.e., states separated by a slash, e.g., 0/1). This is the method developed for Brusatte et al. (2014).
+#' At its' core the function uses either the \link[phytools]{rerootingMethod} (Yang et al. 1995) as implemented in the \link[phytools]{phytools} package (for discrete characters) or the \link[ape]{ace} function in the \link[ape]{ape} package (for continuous characters) to make ancestral state estimates. For discrete characters these are collapsed to the most likely state (or states, given equal likelihoods or likelihood within a defined \code{threshold} value). In the latter case the resulting states are represented as an uncertainty (i.e., states separated by a slash, e.g., 0/1). This is the method developed for Brusatte et al. (2014).
 #'
-#' The function can deal with ordered or unordered characters and does so by allowing only indirect transitions (from 0 to 2 must pass through 1) or direct transitions (from 0 straight to 2), respectively. However, more complex step matrix transitions are not currently supported.
+#' The function can deal with ordered or unordered characters and does so by allowing only indirect transitions (from 0 to 2 must pass through 1) or direct transitions (from 0 straight to 2), respectively. However, more complex costmatrix transitions are not currently supported.
 #'
-#' Ancestral state estimation is complicated where polymorphic or uncertain tip values exist. These are not currently well handled here, although see the \code{fitpolyMk} function in \link{phytools} for a way these could be dealt with in future. The only available options right now are to either treat multiple states as being equally probable of the "true" tip state (i.e., a uniform prior) or to avoid dealing with them completely by treating them as missing (NA) values.
+#' Ancestral state estimation is complicated where polymorphic or uncertain tip values exist. These are not currently well handled here, although see the \code{fitpolyMk} function in \link[phytools]{phytools} for a way these could be dealt with in future. The only available options right now are to either treat multiple states as being equally probable of the "true" tip state (i.e., a uniform prior) or to avoid dealing with them completely by treating them as missing (NA) values.
 #'
 #' It is also possible to try to use phylogenetic information to infer missing states, both for internal nodes (e.g., those leading to missing tip states) and for tips. This is captured by the \code{estimate_all_nodes} and \code{estimate_tip_values} options. These have been partially explored by Lloyd (2018), who cuationed against their use.
 #'
 #' @return
 #'
-#' The function will return the same \code{cladistic_matrix}, but with two key additions: 1. Internal nodes (numbered by \link{ape} formatting) will appear after taxa in each matrix block with estimated states coded for them, and 2. The time-scaled tree used will be added to \code{cladistic_matrix} as \code{cladistic_matrix$topper$tree}. Note that if using the \code{estimate_tip_values = TRUE} option then tip values may also be changed from those provided as input.
+#' The function will return the same \code{cladistic_matrix}, but with two key additions: 1. Internal nodes (numbered by \link[ape]{ape} formatting) will appear after taxa in each matrix block with estimated states coded for them, and 2. The time-scaled tree used will be added to \code{cladistic_matrix} as \code{cladistic_matrix$topper$tree}. Note that if using the \code{estimate_tip_values = TRUE} option then tip values may also be changed from those provided as input.
 #'
 #' @author Graeme T. Lloyd \email{graemetlloyd@@gmail.com} and Thomas Guillerme \email{guillert@@tcd.ie}
 #'
@@ -70,7 +70,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
 
   # How to get predicted tip states for a continuous character? (Phytools answer: http://blog.phytools.org/2013/11/reconstructed-ancestral-tip-states-for.html)
   #   - So basically under ML just inherit state from ancestral node (really this is mean of distribution where sd would grow with duration of branch so to allow the possibility of variance this could also be sampled stochastically
-  # How to deal with step matrices?
+  # How to deal with costmatrices?
   # How to deal with models where intermediate tip states are not even in sample
   # Change help file to explain interactions between all options, e.g., if doing all chars then polymorphisms used for discrete, midpoint for continuous etc.
   # Handle all missing/inapplicable case properly
@@ -95,8 +95,8 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
   # Catch problem with zero-length branches:
   if (any(time_tree$edge.length == 0)) stop("time_tree must not have zero-length branches.")
 
-  # Check for step matrices and stop and warn if found:
-  if (length(x = cladistic_matrix$topper$step_matrices) > 0) stop("Function can not currently deal with step matrices.")
+  # Check for costmatrices and stop and warn if found:
+  if (length(x = cladistic_matrix$topper$costmatrices) > 0) stop("Function can not currently deal with costmatrices.")
 
   # Check estimate_all_nodes is a logical:
   if (!is.logical(estimate_all_nodes)) stop("estimate_all_nodes must be a logical (TRUE or FALSE).")
@@ -152,7 +152,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
   # Get vector of character numbers where all values are NA:
   dataless_characters <- which(x = apply(cladistic_matrix, 2, function(x) all(is.na(x))))
 
-  # Look for all missing characters and stop and wanr user if found:
+  # Look for all missing characters and stop and warn user if found:
   if (!all_missing_allowed && length(x = dataless_characters) > 0) stop(paste0("The following characters are coded as missing across all tips: ", paste0(dataless_characters, collapse = ", "), ". This can arise either because of the input data (in which case it is recommended that the user prune these characters using prune_cladistic_matrix) or because of the chosen options for inapplicables_as_missing, polymorphism_behaviour, and/or uncertainty_behaviour (in which case the user may wish to chose different values for these)."))
 
   # Convert tip states into a list:
@@ -187,7 +187,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
       if (length(x = missingRows) > 0) {
 
         # Build missing state by either forming a polymorphism of all possible tip states, or if continuous the midpoint value:
-        fill_states <- ifelse(tip_states$ordering == "cont", (tip_states$minimum_values + tip_states$maximum_values) / 2, paste(tip_states$minimum_values:tip_states$maximum_values, collapse = "/"))
+        fill_states <- ifelse(tip_states$ordering == "continuous", (tip_states$minimum_values + tip_states$maximum_values) / 2, paste(tip_states$minimum_values:tip_states$maximum_values, collapse = "/"))
 
         # Insert missing values:
         tip_states$tip_states[missingRows] <- fill_states
@@ -237,7 +237,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
     if (length(x = x$tip_states) > 0) {
 
       # If the character is not continuous (i.e., it is some form of discrete character):
-      if (x$ordering != "cont") {
+      if (x$ordering != "continuous") {
 
         # Temporarily store tip states so matrix format can overwrite the stored version below:
         tip_states <- x$tip_states
@@ -272,14 +272,18 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
           }
         }
 
-        # If a continuous character:
+      # If a continuous character:
       } else {
 
         # Simply make tip states the numeric values (should never be a polymorphism) as a vector:
-        x$tip_states <- as.numeric(x$tip_states)
+        x$tip_states <- as.numeric(x = x$tip_states[x$tree$tip.label])
+        
+        # Re-add tip labels:
+        names(x = x$tip_states) <- x$tree$tip.label
+        
       }
 
-      # If tip state has no length (all values are missing):
+    # If tip state has no length (all values are missing):
     } else {
 
       # Create row-less tip states matrix:
@@ -308,7 +312,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
       # Build all zero matrix to begin with:
       x$model <- matrix(0, nrow = n_states, ncol = n_states, dimnames = list(x$minimum_values:x$maximum_values, x$minimum_values:x$maximum_values))
 
-      # for each (just) off-diagonal value store 1 (i.e., N steps to move between adjacent states):
+      # For each (just) off-diagonal value store 1 (i.e., cost to move between adjacent states):
       for (i in 2:n_states) x$model[(i - 1), i] <- x$model[i, (i - 1)] <- 1
     }
 
@@ -326,7 +330,7 @@ estimate_ancestral_states <- function(cladistic_matrix, time_tree, estimate_all_
     if (!is.null(x$tree)) {
 
       # If character is continuous:
-      if (x$ordering == "cont") {
+      if (x$ordering == "continuous") {
 
         # Get ancestral states using ace:
         x$ancestral_states <- ace(x = x$tip_states, phy = x$tree)$ace

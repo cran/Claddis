@@ -21,7 +21,7 @@
 #'
 #' @seealso
 #'
-#' \link{build_cladistic_matrix}, \link{compactify_matrix}, \link{prune_cladistic_matrix}, \link{read_nexus_matrix}, \link{safe_taxonomic_reduction}, \link{write_tnt_matrix}
+#' \link{build_cladistic_matrix}, \link{compactify_cladistic_matrix}, \link{prune_cladistic_matrix}, \link{read_nexus_matrix}, \link{safe_taxonomic_reduction}, \link{write_tnt_matrix}
 #'
 #' @examples
 #'
@@ -173,14 +173,65 @@ write_nexus_matrix <- function(cladistic_matrix, file_name) {
   # Take character block and meld with matri(ces) into matrix block(s):
   matrix_block <- paste(paste(character_block, unlist(x = lapply(X = data_block_strings, paste, collapse = "\n")), "\n;\nEND;\n\n", sep = ""), collapse = "")
 
-  # Make sure step matrices are a list if null:
-  if (!is.list(cladistic_matrix$topper$step_matrices)) cladistic_matrix$topper$step_matrices <- list(NULL)
+  # Make sure costmatrices are a list if null:
+  if (!is.list(cladistic_matrix$topper$costmatrices)) cladistic_matrix$topper$costmatrices <- list(NULL)
 
-  # Create step matrix block:
-  stepmatrix_block <- paste(ifelse(!unlist(x = lapply(X = cladistic_matrix$topper$step_matrices, is.null)), paste(paste("\tUSERTYPE '", names(cladistic_matrix$topper$step_matrices), "' (STEPMATRIX) = ", unlist(x = lapply(X = cladistic_matrix$topper$step_matrices, ncol)), "\n", sep = ""), paste("\t", unlist(x = lapply(X = lapply(X = cladistic_matrix$topper$step_matrices, colnames), paste, collapse = " ")), "\n\t", sep = ""), unlist(x = lapply(X = lapply(X = lapply(X = cladistic_matrix$topper$step_matrices, function(x) {
-    diag(x = x) <- "."
-    return(x)
-  }), apply, 1, paste, collapse = " "), paste, collapse = "\n\t")), "\n\t;\n", sep = ""), ""), collapse = "")
+  # Create costmatrix block:
+  costmatrix_block <- paste(
+    ifelse(
+      test = !unlist(
+        x = lapply(
+          X = cladistic_matrix$topper$costmatrices,
+          FUN = is.null
+        )
+      ),
+      yes = paste(
+        paste(
+          "\tUSERTYPE ",
+          names(cladistic_matrix$topper$costmatrices),
+          " STEPMATRIX = ",
+          unlist(
+            x = lapply(
+              X = cladistic_matrix$topper$costmatrices,
+              FUN = function(x) ncol(x = x$costmatrix)
+            )
+          ),
+          " ",
+          unlist(
+            x = lapply(
+              X = lapply(
+                X = as.list(x = names(x = cladistic_matrix$topper$costmatrices)),
+                FUN = function(x) {
+                  block_costmatrix_appears_in <- which(
+                    x = unlist(
+                      x = lapply(
+                        X = cladistic_matrix[2:length(x = cladistic_matrix)],
+                        FUN = function(y) any(x = y$ordering == x))))[1]
+                  cladistic_matrix[[(1 + block_costmatrix_appears_in)]]$characters$symbols[
+                    1:cladistic_matrix$topper$costmatrices[[x]]$size
+                  ]
+                }
+              ),
+              FUN = paste,
+              collapse = ""
+            )
+          ),
+          "\n",
+          sep = ""
+        ),
+        "\t",
+        unlist(x = lapply(X = lapply(X = lapply(X = cladistic_matrix$topper$costmatrices, function(x) {
+            diag(x = x$costmatrix) <- "."
+            if(any(x$costmatrix == Inf)) x$costmatrix[rownames(x = x$costmatrix), colnames(x = x$costmatrix)] <- gsub(pattern = Inf, replacement = "i", x = x$costmatrix)
+            return(x$costmatrix)
+            }), apply, 1, paste, collapse = " "), paste, collapse = "\n\t")),
+        "\n\t;\n",
+        sep = ""
+      ),
+      no = ""
+    ),
+    collapse = ""
+  )
 
   # Get ordering of all characters in sequence:
   ordering <- unlist(x = lapply(X = data_blocks, "[[", "ordering"))
@@ -189,16 +240,19 @@ write_nexus_matrix <- function(cladistic_matrix, file_name) {
   character_weights <- unlist(x = lapply(X = data_blocks, "[[", "character_weights"))
 
   # Create options block (if no block names):
-  if (all(is.na(block_names))) options_block <- paste(ifelse(all(ordering == "unord"), "\tOPTIONS  DEFTYPE=unord PolyTcount=MINSTEPS ;\n", ifelse(all(ordering == "ord"), "\tOPTIONS  DEFTYPE=ord PolyTcount=MINSTEPS ;\n", "\tOPTIONS  DEFTYPE=unord PolyTcount=MINSTEPS ;\n")), ifelse(length(x = unique(x = ordering)) == 1 && length(x = setdiff(x = unique(x = ordering), y = c("ord", "unord"))) == 0, "", paste("\tTYPESET * UNTITLED  = ", paste(paste(sort(x = unique(x = ordering)), unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = sort(x = unique(x = ordering))), "==", ordering), which), zip_string)), sep = ": "), collapse = ", "), ";\n", sep = "")), sep = "")
+  if (all(is.na(block_names))) options_block <- paste(ifelse(all(ordering == "unordered"), "\tOPTIONS  DEFTYPE=unord PolyTcount=MINSTEPS ;\n", ifelse(all(ordering == "ordered"), "\tOPTIONS  DEFTYPE=ord PolyTcount=MINSTEPS ;\n", "\tOPTIONS  DEFTYPE=unord PolyTcount=MINSTEPS ;\n")), ifelse(length(x = unique(x = ordering)) == 1 && length(x = setdiff(x = unique(x = ordering), y = c("ordered", "unordered"))) == 0, "", paste("\tTYPESET * UNTITLED  = ", paste(paste(sort(x = unique(x = ordering)), unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = sort(x = unique(x = ordering))), "==", ordering), which), zip_string)), sep = ": "), collapse = ", "), ";\n", sep = "")), sep = "")
 
   # Create options block (if there are block names):
   if (!all(is.na(unlist(x = block_names)))) options_block <- paste(paste("\tTYPESET * UNTITLED  (CHARACTERS = ", block_names, ")  =  ", unlist(x = lapply(X = lapply(X = data_blocks, "[[", "ordering"), function(x) paste(paste(paste(sort(x = unique(x = x)), unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = sort(x = unique(x = x))), "==", x), which), zip_string)), sep = ": "), collapse = ", "), sep = ""))), ";\n", sep = ""), collapse = "")
 
   # Replace cont with Squared if continuous characters present:
-  if (length(x = grep(" cont: ", options_block)) > 0) options_block <- gsub(pattern = " cont: ", replacement = " Squared: ", x = options_block)
+  if (length(x = grep(" continuous: ", options_block)) > 0) options_block <- gsub(pattern = " continuous: ", replacement = " Squared: ", x = options_block)
+  
+  # Replace ordered with ord if discrete characters present:
+  if (length(x = grep("ordered: ", options_block)) > 0) options_block <- gsub(pattern = "ordered: ", replacement = "ord: ", x = options_block)
 
   # Convert continuous character weights to one before making weights block:
-  character_weights[ordering == "cont"] <- 1
+  character_weights[ordering == "continuous"] <- 1
 
   # Create weights block (if no block names):
   if (all(is.na(block_names))) weights_block <- ifelse(all(character_weights == 1), "", paste("\tWTSET * UNTITLED  = ", paste(paste(sort(x = unique(x = character_weights)), unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = sort(x = unique(x = character_weights))), "==", character_weights), which), zip_string)), sep = ": "), collapse = ", "), ";\n", sep = ""))
@@ -207,7 +261,7 @@ write_nexus_matrix <- function(cladistic_matrix, file_name) {
   if (!all(is.na(unlist(x = block_names)))) weights_block <- paste(paste("\tWTSET * UNTITLED  (CHARACTERS = ", block_names, ")  =  ", unlist(x = lapply(X = lapply(X = data_blocks, "[[", "character_weights"), function(x) paste(paste(paste(sort(x = unique(x = x)), unlist(x = lapply(X = lapply(X = lapply(X = as.list(x = sort(x = unique(x = x))), "==", x), which), zip_string)), sep = ": "), collapse = ", "), sep = ""))), ";\n", sep = ""), collapse = "")
 
   # Build assumptions block:
-  assumptions_block <- paste("BEGIN ASSUMPTIONS;\n", stepmatrix_block, options_block, weights_block, "END;\n", sep = "")
+  assumptions_block <- paste("BEGIN ASSUMPTIONS;\n", costmatrix_block, options_block, weights_block, "END;\n", sep = "")
 
   # Build full string with all blocks together:
   full_string <- paste("#NEXUS\n\n", header_block, taxa_block, data_block, matrix_block, assumptions_block, sep = "")

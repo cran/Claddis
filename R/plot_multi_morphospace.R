@@ -44,6 +44,9 @@
 #'    "Lophorhinus_willodenensis", "Proburnetia_viatkensis", "Lende_chiweta",
 #'    "Paraburnetia_sneeubergensis", "Burnetia_mirabilis", "BP_1_7098"))
 #'
+#' # Set class as taxonGroups:
+#' class(taxon_groups) <- "taxonGroups"
+#'
 #' # Plot taxon groups including convex hulls:
 #' plot_multi_morphospace(pcoa_input, n_axes = 5, taxon_groups = taxon_groups,
 #'   plot_convex_hulls = TRUE)
@@ -79,6 +82,9 @@ plot_multi_morphospace <- function(pcoa_input, n_axes = 4, taxon_groups = NULL, 
   # Conditional that changes N axes to max axes if set higher and warns user
   # Similarly, only 2 axes means plot is kinda pointless!
   # Never plot taxon names!
+  
+  # If not a valid taxonGroups object then stop and provide feedback to user on what is wrong:
+  if (!is.null(x = taxon_groups) && !is.taxonGroups(x = taxon_groups)) stop(check_taxonGroups(taxon_groups = taxon_groups)[1])
   
   # Set x and y limits (to ensure all plots are scaled the same way):
   x_limits <- y_limits <- range(c(pcoa_input$vectors[, 1:n_axes]))

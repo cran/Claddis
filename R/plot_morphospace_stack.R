@@ -6,8 +6,8 @@
 #'
 #' @param pcoa_input The main input in the format output from \link{ordinate_cladistic_matrix}.
 #' @param taxon_ages A two-column matrix of the first and last apperance dates (columns; \code{"fad"} and \code{"lad"}) for the taxa (as rownames) from \code{pcoa_input}.
-#' @param taxon_groups A named list of groups to which taxa are assigned (optional). This is used to plot points or convex hulls in different colours corresponding to each group. As the user names the groups these can represent any grouping of interest (e.g., taxonomic, ecological, temporal, spatial).
-#' @param time_bins Another two-column matrix of the first and last appearance dates (columns; \code{"fad"} and \code{"lad"}), this time for named (rownames) time-slices .
+#' @param taxon_groups An object of class \code{taxonGroups}.
+#' @param time_bins An object of class \code{timeBins}.
 #' @param shear A single value (between 0 and 1) that determines the "sheared" visual appearance of the platforms.
 #' @param x_axis The ordination axis to plot on the x-axis.
 #' @param y_axis The ordination axis to plot nn the y-axis.
@@ -70,23 +70,29 @@
 #'   cladistic_matrix = day_2016,
 #'   taxa2prune = "Lycaenodon_longiceps"))
 #'
-#' # Build simple taxonomic groups fro Day et al 2016 daat set:
+#' # Build simple taxonomic groups for Day et al 2016 daat set:
 #' taxon_groups <- list(nonBurnetiamorpha = c("Biarmosuchus_tener", "Hipposaurus_boonstrai",
 #'   "Bullacephalus_jacksoni", "Pachydectes_elsi", "Niuksenitia_sukhonensis", "Ictidorhinus_martinsi",
 #'   "RC_20", "Herpetoskylax_hopsoni"), Burnetiamorpha = c("Lemurosaurus_pricei", "Lobalopex_mordax",
 #'   "Lophorhinus_willodenensis", "Proburnetia_viatkensis", "Lende_chiweta",
 #'   "Paraburnetia_sneeubergensis", "Burnetia_mirabilis", "BP_1_7098"))
 #'
+#' # Set class as taxonGroups:
+#' class(taxon_groups) <- "taxonGroups"
+#'
 #' # Build a sequence of equally spaced time bins spanning Day et al. 2016 data:
 #' time_sequence <- seq(from = 270, to = 252, length.out = 6)
 #'
-#' # Reformt this sequence into named time bin matrix:
+#' # Reformat this sequence into named time bin matrix:
 #' time_bins <- matrix(
 #'   data = c(time_sequence[1:(length(x = time_sequence) - 1)],
 #'   time_sequence[2:length(x = time_sequence)]),
 #'   ncol = 2,
 #'   dimnames = list(c("Bin 1", "Bin 2", "Bin 3", "Bin 4", "Bin 5"), c("fad", "lad"))
 #' )
+#'
+#' # Set class as timeBins:
+#' class(time_bins) <- "timeBins"
 #'
 #' # Plot morphospace stack using named time bins:
 #' plot_morphospace_stack(
@@ -113,7 +119,13 @@ plot_morphospace_stack <- function(pcoa_input, taxon_ages, taxon_groups, time_bi
   # - Maybe move this all to plot3D in future (or rgl or an optional choice between them)
   # - Option to plot isometric style view so bottom corner Vs away from viewer? (Will require mainly an edit to translation function, but also y_addition)
   # - Do named time bins (matrix with rownames rather than vector) instead and push this throughout the rest of the code.
-
+  
+  # Check time_bins is in a valid format and stop and warn user if not:
+  if (!is.timeBins(x = time_bins)) stop(check_timeBins(time_bins = time_bins))
+  
+  # If not a valid taxonGroups object then stop and provide feedback to user on what is wrong:
+  if (!is.taxonGroups(x = taxon_groups)) stop(check_taxonGroups(taxon_groups = x)[1])
+  
   # Subfunction to translate input ordination coordinates to stack plotting coordinates:
   translate_to_stack_coordinates <- function(x, y, x_range, y_range, shear, n_stacks, platform_size) {
     if (length(x = x) > 0) {
@@ -154,7 +166,7 @@ plot_morphospace_stack <- function(pcoa_input, taxon_ages, taxon_groups, time_bi
   y_lab <- paste("PC", y_axis, " (", round(scree_values[y_axis], 2), "% of total variance)", sep = "")
   
   # Find the taxa assigned to each time bin:
-  taxa_assigned_to_bins <- assign_taxa_to_bins(taxon_ages = taxon_ages, named_time_bins = time_bins)
+  taxa_assigned_to_bins <- assign_taxa_to_bins(taxon_ages = taxon_ages, time_bins = time_bins)
   
   # Set default solid colour for each taxon to black:
   solid_colours <- rep(x = "black", length.out = nrow(x = pcoa_input$vectors))

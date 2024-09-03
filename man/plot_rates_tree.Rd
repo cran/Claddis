@@ -26,7 +26,7 @@ The raw output from \link{test_rates} can be difficult to interpret without visu
 
 The function will only work for a single model, but in practice the user may wish to produce multiple plots in which case they simply need to rn the function multiple times or setup a multipanel window first with \link{layout}, or similar.
 
-Plots use the \link{geoscale} package to add geologic time to the x-axis and interested users should consult the documentation tere for a full ist of options (passed via ...) in the function (see example below).
+Plots use the \link[geoscale]{geoscale} package to add geologic time to the x-axis and interested users should consult the documentation tere for a full ist of options (passed via ...) in the function (see example below).
 
 Calculated rates (changes per lineage million years) are plotted as filled circles and models are plotted as horizontal lines labelled by rate parameters (lambda_i).
 }
@@ -54,6 +54,14 @@ cladistic_matrix <- prune_cladistic_matrix(
   blocks2prune = 1
 )
 
+# Generate nine two million year time bins:
+time_bins <- matrix(data = c(seq(from = 270, to = 252, length.out = 10)[1:9],
+  seq(from = 270, to = 252, length.out = 10)[2:10]), ncol = 2,
+  dimnames = list(LETTERS[1:9], c("fad", "lad")))
+
+# Set class as timeBins:
+class(time_bins) <- "timeBins"
+
 # Run test rates function for each clade partition:
 test_rates_output <- test_rates(
   time_tree = time_tree,
@@ -66,7 +74,7 @@ test_rates_output <- test_rates(
     from = 1,
     to = length(x = time_tree$edge.length), by = 1
   )), as.list),
-  time_bins = seq(from = 270, to = 252, length.out = 10)
+  time_bins = time_bins
 )
 
 # Plot ninth branch partition model (lowest AIC value):

@@ -1,4 +1,85 @@
+Version - 0.7.0 - 2024-09-01
+
+- Changed all stepmatrix terms to costmatrix as this is the true general term.
+- Added calculate_tree_length function to get parsimony tree lengths and also generate data for use in ancestral state reconstructions.
+- Added permute_all_polymorphisms to generate all possible polymorphisms for a set of states.
+- Added permute_all_uncertainties to generate all possible uncertainties for a set of states.
+- Added make_costmatrix to automate building common costmatrix types (ordered, unordered, irreversible, Dollo, stratigraphy).
+- Fixed broken links in convert_adjacency_matrix_to_costmatrix.
+- Changed character types from abbreviated versions (cont, ord and unord) to full names (continuous, ordered and unordered) across package.
+- Added new class of "costMatrix" to package.
+- Added check_costMatrix, is.costMatrix, and print.costMatrix functions to support new class.
+- Added find_shortest_costmatrix_path function to find shortest state-to-state path from a costmatrix.
+- Added reconstruct_ancestral_states to generate parsimony-based ancestral state estimates.
+- Added find_costmatrix_minimum_span function to find minimum cost a character could have on a tree.
+- Added find_unique_trees function as a faster alternative to ape::unique.multiPhylo for isolating just unique topologies from a larger set.
+- Added calculate_kardashian_index to calculate the Kardashian Index.
+- Fixed some typos and manual issues in find_unique_trees.
+- Fixed bug in plot_rates_time where partitions appeared in wrong place.
+- Added is_graph_connected to check whether a graph is connected.
+- Added split_out_subgraphs to generate separate adjacency matrices for every connected component of a graph.
+- Added permute_graph_splits to permute all possible ways to remove edges from a connected graph.
+- Added convert_costmatrix_to_stategraph to find the minimal directed graph representation of a costmatrix.
+- Added convert_stategraph_to_costmatrix function as reverse of convert_costmatrix_to_stategraph.
+- Added option to add body size landscape to plot_morphospace.
+- Added count_cherries function to count number of cherries on a given phylogenetic tree or set of trees.
+- Added fix_costmatrix function to ensure all state-to-state transtion costs are self-consistent.
+- Added permute_treeshapes function to permute all unique treeshapes (i.e., all rooted unlabelled multifurcating trees).
+- Added make_labels function to generate N unique text labels.
+- Added permute_tipstates to permute all possible tip states given a specific tree.
+- Added permute_restricted_compositions (initallly a subfunction of permute_tipstates) to permute all restricted compositions (e.g., for permuting tip states on the star tree).
+- Added permute_all_treeshape_labellings function to generate (permute) all labelled trees from a treeshape and label set.
+- Added permute_costmatrices function to generate all valid costmatrices from a restricted set of states and cost values.
+- Added permute_connected_graphs function to generate all connected graphs for a particular vertex count.
+- Added add_polymorphisms_to_costmatrix function to add polymorphisms to costmatrices and offering multiple approaches to do so.
+- Added add_uncertainties_to_costmatrix function to add uncertainties to costmatrices using the minimum cost rule.
+- Fixed bug with write_nexus_matrix where costmatrices were not writing character symbols correctly.
+- Added Claddis logo to manual and README.
+- Fixed bug in how read_nexus_matrix imports costmatrices from NEXUS format.
+- Added new stateGraph class and supporting functions print.stateGraph and XXXXX.
+- Added classify_costmatrix function to classify costmatrix character into one of twelve distinct types.
+- Added find_stategraph_minimum_span function to find a minimum spanning tree of a stategraph.
+- Renamed compactify_matrix as compactify_cladistic_matrix to distiguish between other matrix types (e.g., costmatrices).
+- Added calculate_g function to calculate the maximum possible steps for a cladistic character.
+- Fixed bug with read_nexus_matrix which previously errored where more than 26 costmatrices were specified.
+- Added Jen Hoyal Cuthill to package authors.
+- Added calculate_gmax function to calculate the maximum possible steps for a cladistic character under any state frequency.
+- Fixed bug in how estimate_ancestral_states was estimating ancestral states for continuous characters.
+- Fixed bug in safe_taxonomic_reduction where only one character scored for a taxon.
+- Added check_stateGraph and is.stateGraph to support stateGraph class.
+- Fixed bug with calculate_MPD and calculate_WMPD where NAs were confounding calculation.
+- Added estimate_squared_change_ancestors function to implement squared change parsimony.
+
+Version - 0.6.6 - 2021-02-21
+
+- Added check_cladisticMatrix and is.cladisticMatrix functions to support cladisticMatrix class.
+- Changed class of assign_taxa_to_bins output to taxonGroups.
+- Fixed bug in prune_cladistic_matrix where blocks were not being renamed correctly.
+- Upped limit for number of step matrices allowed (from 26 to 702).
+- Fixed minor bug when reading stepmatrices with read_nexus_matrix.
+- Added locate_bracket_positions function, to locate positions of any kind of brackets in a text string.
+- Added convert_state_tree_to_adjacency_matrix function, to open up means for dealing with character state trees in future.
+- Added convert_adjacency_matrix_to_stepmatrix function, to allow conversion of character state trees to step matrices.
+
+Version - 0.6.5 - 2020-08-11
+
+- Pushing new timeBins class through Claddis.
+- Adding print.timeBins to further support timeBins class.
+- Renamed check_time_bins to check_timeBins.
+- Added weights output to calculate_morphological_distances to enable weighted mean pairwise distances.
+- Added calculate_WMPD function to calculate weighted mean pairwise distances.
+- Added calculate_MPD function to calculate mean pairwise distances.
+- Added check_taxonGroups, is.taxonGroups, and print.taxonGroups to support a taxonGroups class.
+- Pushing new taxonGroups class through Claddis.
+
+Version - 0.6.4 - 2020-08-10
+
 - Removed redundant Claddis:: calls from estimate_ancestral_states (no noticeable change to user). Thanks to Phil Novack-Gottshall for the heads up.
+- Added new drop_time_tip function to safely prune tips from a time-scaled tree.
+- Replaced all drop.tip calls with drop_time_tip across package (no noticeable change to users).
+- Added new timeBins class for time bins objects.
+- Added is.timeBins function to check timeBins class objects are formatted in a valid way.
+- Added find_time_bin_midpoints function to get midpoints of time bins from a timeBins object.
 
 Version - 0.6.3 - 2020-14-09
 

@@ -35,6 +35,7 @@
 #' \item{distance_metric}{The distance metric used.}
 #' \item{distance_matrix}{The pairwise distance matrix generated.}
 #' \item{comparable_character_matrix}{The matrix of characters that can be compared for each pairwise distance.}
+#' \item{comparable_weights_matrix}{The matrix of weights for each pairwise distance.}
 #'
 #' @author Graeme T. Lloyd \email{graemetlloyd@@gmail.com} and Thomas Guillerme \email{guillert@@tcd.ie}
 #'
@@ -98,6 +99,10 @@
 #' # Show number of characters that can be scored for
 #' # each pairwise comparison:
 #' distances$comparable_character_matrix
+#'
+#' # Show weighting of each calculable pairwise distance:
+#' distances$comparable_weights_matrix
+#'
 #' @export calculate_morphological_distances
 calculate_morphological_distances <- function(cladistic_matrix, distance_metric = "mord", ged_type = "wills", distance_transformation = "arcsine_sqrt", polymorphism_behaviour = "min_difference", uncertainty_behaviour = "min_difference", inapplicable_behaviour = "missing", character_dependencies = NULL, alpha = 0.5) {
 
@@ -105,12 +110,13 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
   # CHECK POLYMORPHISM UNCERTAINTY IN GENERAL AS NOT CLEAR IT IS DOING WHAT IT SHOULD DO.
   # CHECK TRANSFORM IS APPROPRIATE AND WARN USER IF NOT
   # MAYBE ALLOW MANHATTAN TYPE DISTANCES TOO.
-  # ADD LEHAMN REFERENCE!
+  # ADD LEHMANN REFERENCE!
   # ALLOW MANHATTAN DISTANCES
   # CONSIDER DISTANCES FOR POLYMORPHISMS IN SAME WAY PHYTOOLS DOES WITH POLYMK
   # ADD TRANSORMATION USED TO OUTPUT (AS MAY CHANGE IF OPTIONS COLLIDE)
   # ALLOW WMPD SOMEHOW? MAYBE A SEPARATE FUNCTION WITH GROUPS (WHICH NEEDS TO BE IMPLEMENTED ACROSS THE PACKAGE FOR DISPARITY PLOTS ETC.)
   # RETOOL AROUND STOCHASTIC CHARACTER MAPS IF DOING PHYLOGENY TOO
+  # CHECK HSJ MAKES SENSE IN CONTEXT OF COMPARABLE WEIGHTS - MIGHT NEED A THEORETICAL SOLUTION BEFORE AN IMPLEMENTATION ONE.
 
   # Check cladistic_matrix has class cladisticMatrix and stop and warn user if not:
   if (!inherits(x = cladistic_matrix, what = "cladisticMatrix")) stop("cladistic_matrix must be an object of class \"cladisticMatrix\".")
@@ -256,8 +262,8 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
         })
 
         # If there are unordered characters present convert maximum distances to one:
-        if (any(character_ordering[mean_characters_to_check] == "unord")) {
-          state_matrices[which(x = character_ordering[mean_characters_to_check] == "unord")] <- lapply(X = state_matrices[which(x = character_ordering[mean_characters_to_check] == "unord")], function(x) {
+        if (any(character_ordering[mean_characters_to_check] == "unordered")) {
+          state_matrices[which(x = character_ordering[mean_characters_to_check] == "unordered")] <- lapply(X = state_matrices[which(x = character_ordering[mean_characters_to_check] == "unordered")], function(x) {
             x[x > 1] <- 1
             return(x)
           })
@@ -295,7 +301,7 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
   fix_unordered <- function(differences, comparable_characters, ordering) {
 
     # If unordered and distance greater than one replace with one:
-    if (length(x = which(x = differences > 1)) > 0) differences[which(x = differences > 1)[which(x = ordering[comparable_characters[which(x = differences > 1)]] == "unord")]] <- 1
+    if (length(x = which(x = differences > 1)) > 0) differences[which(x = differences > 1)[which(x = ordering[comparable_characters[which(x = differences > 1)]] == "unordered")]] <- 1
 
     # Return corrected unordered distances:
     return(list(differences))
@@ -422,8 +428,8 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
     differences
   }
 
-  # Check for step matrices and stop and warn user if found:
-  if (is.list(cladistic_matrix$topper$step_matrices)) stop("Function cannot currently deal with step matrices.")
+  # Check for costmatrices and stop and warn user if found:
+  if (is.list(cladistic_matrix$topper$costmatrices)) stop("Function cannot currently deal with costmatrices.")
 
   # Check input of distance_transformation is valid and stop and warn if not:
   if (length(x = setdiff(x = distance_transformation, y = c("arcsine_sqrt", "none", "sqrt"))) > 0) stop("distance_transformation must be one of \"none\", \"sqrt\", or \"arcsine_sqrt\".")
@@ -688,9 +694,12 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
 
   # Build comparable characters matrix:
   comparable_character_matrix <- convert_list_to_matrix(lapply(X = comparable_character_list, length), cladistic_matrix, diag = apply(cladistic_matrix, 1, count_complete))
-
+  
+  # Build comparable weights matrix:
+  comparable_weights_matrix <- convert_list_to_matrix(lapply(X = comparable_character_list, FUN = function(x) sum(x = character_weights[x])), cladistic_matrix, diag = unname(obj = apply(X = cladistic_matrix, MARGIN = 1, FUN = function(x) sum(x = character_weights[which(x = !is.na(x = x))]))))
+  
   # Add row and column names (taxa) to distance matrices:
-  rownames(x = distance_matrix) <- colnames(x = distance_matrix) <- rownames(x = comparable_character_matrix) <- colnames(x = comparable_character_matrix) <- rownames(x = cladistic_matrix)
+  rownames(x = distance_matrix) <- colnames(x = distance_matrix) <- rownames(x = comparable_character_matrix) <- colnames(x = comparable_character_matrix) <- rownames(x = comparable_weights_matrix) <- colnames(x = comparable_weights_matrix) <- rownames(x = cladistic_matrix)
 
   # If there are any NaNs replace with NAs:
   if (any(is.nan(distance_matrix))) distance_matrix[is.nan(distance_matrix)] <- NA
@@ -723,5 +732,5 @@ calculate_morphological_distances <- function(cladistic_matrix, distance_metric 
   }
 
   # Return compiled output:
-  list(distance_metric = distance_metric, distance_matrix = distance_matrix, comparable_character_matrix = comparable_character_matrix)
+  list(distance_metric = distance_metric, distance_matrix = distance_matrix, comparable_character_matrix = comparable_character_matrix, comparable_weights_matrix = comparable_weights_matrix)
 }

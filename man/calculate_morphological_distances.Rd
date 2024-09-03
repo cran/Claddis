@@ -39,6 +39,7 @@ calculate_morphological_distances(
 \item{distance_metric}{The distance metric used.}
 \item{distance_matrix}{The pairwise distance matrix generated.}
 \item{comparable_character_matrix}{The matrix of characters that can be compared for each pairwise distance.}
+\item{comparable_weights_matrix}{The matrix of weights for each pairwise distance.}
 }
 \description{
 Takes a cladistic morphological dataset and converts it into a set of pairwise distances.
@@ -106,6 +107,10 @@ distances$distance_matrix
 # Show number of characters that can be scored for
 # each pairwise comparison:
 distances$comparable_character_matrix
+
+# Show weighting of each calculable pairwise distance:
+distances$comparable_weights_matrix
+
 }
 \references{
 Gower, J. C., 1971. A general coefficient of similarity and some of its properties. \emph{Biometrika}, \bold{27}, 857-871.
